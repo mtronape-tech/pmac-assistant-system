@@ -1,0 +1,40 @@
+{
+  "name": "@pmac/mcp-server",
+  "version": "1.0.0",
+  "description": "MCP Server для PMAC Assistant System",
+  "main": "dist/index.js",
+  "type": "module",
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsx watch src/index.ts",
+    "start": "node dist/index.js",
+    "clean": "rimraf dist",
+    "test": "jest",
+    "lint": "eslint src --ext .ts"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^0.10.0",
+    "@pmac/shared-types": "workspace:*",
+    "express": "^4.18.0",
+    "cors": "^2.8.5",
+    "redis": "^4.6.0",
+    "pg": "^8.11.0",
+    "zod": "^3.22.0",
+    "dotenv": "^16.3.0",
+    "winston": "^3.11.0"
+  },
+  "devDependencies": {
+    "@types/express": "^4.17.0",
+    "@types/cors": "^2.8.0",
+    "@types/pg": "^8.10.0",
+    "@types/node": "^20.0.0",
+    "typescript": "^5.0.0",
+    "tsx": "^4.0.0",
+    "rimraf": "^5.0.0",
+    "jest": "^29.0.0",
+    "@types/jest": "^29.0.0",
+    "eslint": "^8.0.0",
+    "@typescript-eslint/eslint-plugin": "^6.0.0",
+    "@typescript-eslint/parser": "^6.0.0"
+  }
+}
