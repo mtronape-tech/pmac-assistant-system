@@ -1,0 +1,42 @@
+{
+  "name": "pmac-assistant-system",
+  "version": "1.0.0",
+  "description": "Интеллектуальный помощник для наладчиков станков с ЧПУ",
+  "private": true,
+  "workspaces": [
+    "packages/*",
+    "services/*"
+  ],
+  "scripts": {
+    "dev": "docker-compose -f docker-compose.dev.yml up",
+    "build": "docker-compose -f docker-compose.prod.yml build",
+    "start": "docker-compose -f docker-compose.prod.yml up",
+    "test": "npm run test --workspaces",
+    "lint": "npm run lint --workspaces",
+    "clean": "npm run clean --workspaces"
+  },
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "typescript": "^5.0.0",
+    "prettier": "^3.0.0",
+    "eslint": "^8.0.0"
+  },
+  "engines": {
+    "node": ">=18.0.0",
+    "npm": ">=9.0.0"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/your-org/pmac-assistant-system.git"
+  },
+  "keywords": [
+    "pmac",
+    "cnc",
+    "industrial",
+    "ai",
+    "mcp",
+    "automation"
+  ],
+  "author": "PMAC Assistant Team",
+  "license": "MIT"
+}

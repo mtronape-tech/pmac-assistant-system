@@ -1,0 +1,177 @@
+version: '3.8'
+
+services:
+  # PostgreSQL с расширением TimescaleDB
+  postgres:
+    image: timescale/timescaledb:latest-pg15
+    container_name: pmac-postgres
+    environment:
+      POSTGRES_DB: pmac_assistant
+      POSTGRES_USER: pmac_user
+      POSTGRES_PASSWORD: pmac_password
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./scripts/init-db.sql:/docker-entrypoint-initdb.d/init-db.sql
+    networks:
+      - pmac-network
+
+  # Redis для кэширования
+  redis:
+    image: redis:7-alpine
+    container_name: pmac-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    networks:
+      - pmac-network
+
+  # Vector Database (Weaviate)
+  weaviate:
+    image: semitechnologies/weaviate:1.22.4
+    container_name: pmac-weaviate
+    ports:
+      - "8080:8080"
+    environment:
+      QUERY_DEFAULTS_LIMIT: 25
+      AUTHENTICATION_ANONYMOUS_ACCESS_ENABLED: 'true'
+      PERSISTENCE_DATA_PATH: '/var/lib/weaviate'
+      DEFAULT_VECTORIZER_MODULE: 'none'
+      ENABLE_MODULES: 'text2vec-openai,text2vec-cohere,text2vec-huggingface,ref2vec-centroid,generative-openai,qna-openai'
+      CLUSTER_HOSTNAME: 'node1'
+    volumes:
+      - weaviate_data:/var/lib/weaviate
+    networks:
+      - pmac-network
+
+  # MCP Server
+  mcp-server:
+    build:
+      context: ./services/mcp-server
+      dockerfile: Dockerfile.dev
+    container_name: pmac-mcp-server
+    ports:
+      - "3001:3001"
+    environment:
+      NODE_ENV: development
+      PMAC_MODE: simulation
+      DATABASE_URL: postgresql://pmac_user:pmac_password@postgres:5432/pmac_assistant
+      REDIS_URL: redis://redis:6379
+      WEAVIATE_URL: http://weaviate:8080
+    volumes:
+      - ./services/mcp-server:/app
+      - /app/node_modules
+    depends_on:
+      - postgres
+      - redis
+      - weaviate
+    networks:
+      - pmac-network
+
+  # API Gateway
+  api-gateway:
+    build:
+      context: ./services/api-gateway
+      dockerfile: Dockerfile.dev
+    container_name: pmac-api-gateway
+    ports:
+      - "3002:3002"
+    environment:
+      NODE_ENV: development
+      MCP_SERVER_URL: http://mcp-server:3001
+      DATABASE_URL: postgresql://pmac_user:pmac_password@postgres:5432/pmac_assistant
+      REDIS_URL: redis://redis:6379
+    volumes:
+      - ./services/api-gateway:/app
+      - /app/node_modules
+    depends_on:
+      - mcp-server
+      - postgres
+      - redis
+    networks:
+      - pmac-network
+
+  # Data Collection Service (Go)
+  data-collection:
+    build:
+      context: ./services/data-collection
+      dockerfile: Dockerfile.dev
+    container_name: pmac-data-collection
+    environment:
+      DATABASE_URL: postgresql://pmac_user:pmac_password@postgres:5432/pmac_assistant
+      PMAC_MODE: simulation
+    volumes:
+      - ./services/data-collection:/app
+    depends_on:
+      - postgres
+    networks:
+      - pmac-network
+
+  # Analytics Service (Python)
+  analytics:
+    build:
+      context: ./services/analytics
+      dockerfile: Dockerfile.dev
+    container_name: pmac-analytics
+    ports:
+      - "3003:3003"
+    environment:
+      DATABASE_URL: postgresql://pmac_user:pmac_password@postgres:5432/pmac_assistant
+      REDIS_URL: redis://redis:6379
+    volumes:
+      - ./services/analytics:/app
+    depends_on:
+      - postgres
+      - redis
+    networks:
+      - pmac-network
+
+  # Recommendations Service (Python)
+  recommendations:
+    build:
+      context: ./services/recommendations
+      dockerfile: Dockerfile.dev
+    container_name: pmac-recommendations
+    ports:
+      - "3004:3004"
+    environment:
+      DATABASE_URL: postgresql://pmac_user:pmac_password@postgres:5432/pmac_assistant
+      REDIS_URL: redis://redis:6379
+    volumes:
+      - ./services/recommendations:/app
+    depends_on:
+      - postgres
+      - redis
+    networks:
+      - pmac-network
+
+  # Web Frontend
+  web-frontend:
+    build:
+      context: ./packages/web-frontend
+      dockerfile: Dockerfile.dev
+    container_name: pmac-web-frontend
+    ports:
+      - "3000:3000"
+    environment:
+      NEXT_PUBLIC_API_URL: http://localhost:3002
+      NEXT_PUBLIC_WS_URL: ws://localhost:3002
+    volumes:
+      - ./packages/web-frontend:/app
+      - /app/node_modules
+      - /app/.next
+    depends_on:
+      - api-gateway
+    networks:
+      - pmac-network
+
+volumes:
+  postgres_data:
+  redis_data:
+  weaviate_data:
+
+networks:
+  pmac-network:
+    driver: bridge

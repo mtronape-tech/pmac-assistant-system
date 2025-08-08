@@ -1,0 +1,2 @@
+python pdf_to_txt_converter.py "document.pdf"
+python pdf_to_txt_converter.py "manual.pdf" "manual_text.txt"
