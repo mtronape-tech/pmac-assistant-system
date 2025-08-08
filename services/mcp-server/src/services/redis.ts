@@ -99,7 +99,7 @@ export class RedisService {
 
   async hget(key: string, field: string): Promise<string | null> {
     const client = this.getClient();
-    return await client.hGet(key, field);
+    return await client.hGet(key, field) || null;
   }
 
   async hgetall(key: string): Promise<Record<string, string>> {

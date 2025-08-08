@@ -1,5 +1,5 @@
-import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
-import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
+import { Server as McpServer } from "@modelcontextprotocol/sdk/server/index.js";
+import { SSEServerTransport } from "@modelcontextprotocol/sdk/server/sse.js";
 import express from "express";
 import cors from "cors";
 import { randomUUID } from "node:crypto";
@@ -49,39 +49,51 @@ async function main() {
     }));
 
     // Map для хранения транспортов по session ID
-    const transports: { [sessionId: string]: StreamableHTTPServerTransport } = {};
+    const transports: { [sessionId: string]: SSEServerTransport } = {};
+
+    // Обработка GET запросов для установки SSE соединения
+    app.get('/mcp', async (req, res) => {
+      const endpoint = '/mcp';
+      const transport = new SSEServerTransport(endpoint, res);
+      
+      // Настройка обработчиков событий
+      transport.onclose = () => {
+        if (transport.sessionId) {
+          delete transports[transport.sessionId];
+          logger.info(`Сессия закрыта: ${transport.sessionId}`);
+        }
+      };
+
+      transport.onerror = (error) => {
+        logger.error('Ошибка транспорта:', error);
+      };
+
+      transport.onmessage = async (message) => {
+        try {
+          // Обработка сообщения сервером
+          // В версии 0.4.0 сервер автоматически обрабатывает сообщения
+          // через подключенный транспорт
+        } catch (error) {
+          logger.error('Ошибка обработки сообщения:', error);
+        }
+      };
+
+      // Сохраняем транспорт
+      transports[transport.sessionId] = transport;
+      logger.info(`Новая сессия создана: ${transport.sessionId}`);
+
+      // Подключаем сервер к транспорту
+      await server.connect(transport);
+      
+      // Запускаем SSE поток
+      await transport.start();
+    });
 
     // Обработка POST запросов для клиент-серверной коммуникации
     app.post('/mcp', async (req, res) => {
-      const sessionId = req.headers['mcp-session-id'] as string | undefined;
-      let transport: StreamableHTTPServerTransport;
-
-      if (sessionId && transports[sessionId]) {
-        // Переиспользование существующего транспорта
-        transport = transports[sessionId];
-      } else if (!sessionId && req.body.method === 'initialize') {
-        // Новый запрос инициализации
-        transport = new StreamableHTTPServerTransport({
-          sessionIdGenerator: () => randomUUID(),
-          onsessioninitialized: (sessionId) => {
-            transports[sessionId] = transport;
-            logger.info(`Новая сессия создана: ${sessionId}`);
-          },
-          enableDnsRebindingProtection: true,
-          allowedHosts: ['127.0.0.1', 'localhost'],
-        });
-
-        // Очистка транспорта при закрытии
-        transport.onclose = () => {
-          if (transport.sessionId) {
-            delete transports[transport.sessionId];
-            logger.info(`Сессия закрыта: ${transport.sessionId}`);
-          }
-        };
-
-        await server.connect(transport);
-      } else {
-        // Некорректный запрос
+      const sessionId = req.query.sessionId as string;
+      
+      if (!sessionId || !transports[sessionId]) {
         res.status(400).json({
           jsonrpc: '2.0',
           error: {
@@ -93,32 +105,8 @@ async function main() {
         return;
       }
 
-      // Обработка запроса
-      await transport.handleRequest(req, res, req.body);
-    });
-
-    // Обработка GET запросов для сервер-клиентских уведомлений через SSE
-    app.get('/mcp', async (req, res) => {
-      const sessionId = req.headers['mcp-session-id'] as string | undefined;
-      if (!sessionId || !transports[sessionId]) {
-        res.status(400).send('Invalid or missing session ID');
-        return;
-      }
-      
       const transport = transports[sessionId];
-      await transport.handleRequest(req, res);
-    });
-
-    // Обработка DELETE запросов для завершения сессии
-    app.delete('/mcp', async (req, res) => {
-      const sessionId = req.headers['mcp-session-id'] as string | undefined;
-      if (!sessionId || !transports[sessionId]) {
-        res.status(400).send('Invalid or missing session ID');
-        return;
-      }
-      
-      const transport = transports[sessionId];
-      await transport.handleRequest(req, res);
+      await transport.handlePostMessage(req, res);
     });
 
     // Health check endpoint

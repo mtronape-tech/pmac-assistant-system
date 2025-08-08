@@ -1,27 +1,37 @@
-# MCP Server - PMAC Assistant System
+# MCP Server для PMAC Assistant System
 
-MCP (Model Context Protocol) сервер для интеллектуального помощника наладчика станков с ЧПУ на базе контроллера Turbo PMAC.
+Этот сервер реализует протокол Model Context Protocol (MCP) для интеграции с системами искусственного интеллекта, предоставляя инструменты для работы с контроллерами PMAC.
 
 ## Описание
 
-Этот сервер предоставляет набор инструментов для:
-- Управления переменными PMAC контроллера
-- Анализа данных и трендов
-- Поиска в базе знаний
+MCP Server предоставляет набор инструментов для:
+- Чтения и записи переменных PMAC
+- Получения статуса контроллера
+- Выполнения команд PMAC
+- Анализа исторических данных
 - Генерации рекомендаций
-- Мониторинга безопасности
+- Поиска в базе знаний
 
 ## Архитектура
 
 ```
-MCP Server
-├── PMAC Tools (чтение/запись переменных, статус, команды)
-├── Knowledge Base Tools (поиск документов, добавление)
-├── Analytics Tools (анализ трендов, обнаружение аномалий)
-├── Recommendation Tools (генерация рекомендаций)
-├── Database Service (PostgreSQL + TimescaleDB)
-├── Redis Service (кэширование, сессии)
-└── PMAC Simulator (для разработки и тестирования)
+┌─────────────────┐    ┌─────────────────┐    ┌─────────────────┐
+│   MCP Client    │    │   MCP Server    │    │   PMAC Controller│
+│                 │◄──►│                 │◄──►│                 │
+│  (AI System)    │    │  (This Server)  │    │  (Real/Sim)     │
+└─────────────────┘    └─────────────────┘    └─────────────────┘
+                              │
+                              ▼
+                       ┌─────────────────┐
+                       │   PostgreSQL    │
+                       │   (TimescaleDB) │
+                       └─────────────────┘
+                              │
+                              ▼
+                       ┌─────────────────┐
+                       │     Redis       │
+                       │   (Cache)       │
+                       └─────────────────┘
 ```
 
 ## Установка и запуск
@@ -31,12 +41,10 @@ MCP Server
 - Node.js 18+
 - PostgreSQL с расширением TimescaleDB
 - Redis
-- Docker (опционально)
 
 ### Установка зависимостей
 
 ```bash
-cd services/mcp-server
 npm install
 ```
 
@@ -46,41 +54,36 @@ npm install
 
 ```env
 # Сервер
-PORT=3001
+PORT=3000
 NODE_ENV=development
 
 # База данных
-DATABASE_URL=postgresql://pmac_user:pmac_password@localhost:5432/pmac_assistant
+DATABASE_URL=postgresql://username:password@localhost:5432/pmac_assistant
 
 # Redis
 REDIS_URL=redis://localhost:6379
 
 # PMAC
-PMAC_MODE=simulation
-PMAC_SIMULATION_DELAY=100
+PMAC_MODE=simulation  # simulation или real
+PMAC_HOST=192.168.1.100
+PMAC_PORT=1025
 
 # Логирование
 LOG_LEVEL=info
+LOG_FILE=logs/mcp-server.log
 ```
 
-### Запуск в режиме разработки
+### Сборка и запуск
 
 ```bash
-npm run dev
-```
-
-### Запуск в продакшене
-
-```bash
+# Сборка проекта
 npm run build
+
+# Запуск в режиме разработки
+npm run dev
+
+# Запуск в продакшене
 npm start
-```
-
-### Запуск через Docker
-
-```bash
-docker build -f Dockerfile.dev -t pmac-mcp-server .
-docker run -p 3001:3001 pmac-mcp-server
 ```
 
 ## Доступные инструменты
@@ -88,21 +91,24 @@ docker run -p 3001:3001 pmac-mcp-server
 ### PMAC Tools
 
 #### `read_pmac_variable`
-Читает значение переменной PMAC по типу и адресу.
+Читает значение переменной PMAC.
 
 **Параметры:**
-- `variableType` (P|Q|I|M|L) - Тип переменной PMAC
-- `address` (number) - Адрес переменной (1-8192)
-- `machineId` (string, опционально) - ID машины
+- `variableType` (string): Тип переменной ("P", "Q", "I", "M", "L")
+- `address` (number): Адрес переменной (1-8192)
+- `machineId` (string, опционально): ID машины
 
 **Пример:**
 ```json
 {
-  "name": "read_pmac_variable",
-  "arguments": {
-    "variableType": "P",
-    "address": 1,
-    "machineId": "machine-001"
+  "method": "tools/call",
+  "params": {
+    "name": "read_pmac_variable",
+    "arguments": {
+      "variableType": "P",
+      "address": 1,
+      "machineId": "machine-001"
+    }
   }
 }
 ```
@@ -111,54 +117,35 @@ docker run -p 3001:3001 pmac-mcp-server
 Записывает значение в переменную PMAC.
 
 **Параметры:**
-- `variableType` (P|Q|I|M|L) - Тип переменной PMAC
-- `address` (number) - Адрес переменной (1-8192)
-- `value` (number) - Значение для записи
-- `machineId` (string, опционально) - ID машины
-- `confirm` (boolean, опционально) - Подтверждение операции
+- `variableType` (string): Тип переменной ("P", "Q", "I", "M", "L")
+- `address` (number): Адрес переменной (1-8192)
+- `value` (number): Значение для записи
+- `machineId` (string, опционально): ID машины
+- `confirm` (boolean, опционально): Подтверждение для критических переменных
 
 #### `get_pmac_status`
 Получает текущий статус контроллера PMAC.
 
 **Параметры:**
-- `machineId` (string, опционально) - ID машины
+- `machineId` (string, опционально): ID машины
 
 #### `execute_pmac_command`
 Выполняет команду на контроллере PMAC.
 
 **Параметры:**
-- `command` (string) - Команда PMAC для выполнения
-- `machineId` (string, опционально) - ID машины
-- `confirm` (boolean, опционально) - Подтверждение операции
+- `command` (string): Команда PMAC
+- `machineId` (string, опционально): ID машины
+- `confirm` (boolean, опционально): Подтверждение для критических команд
 
 #### `get_pmac_history`
 Получает исторические данные переменных PMAC.
 
 **Параметры:**
-- `variableType` (P|Q|I|M|L, опционально) - Тип переменной
-- `address` (number, опционально) - Адрес переменной
-- `machineId` (string, опционально) - ID машины
-- `hours` (number, опционально) - Количество часов назад
-- `limit` (number, опционально) - Максимальное количество записей
-
-### Knowledge Base Tools
-
-#### `search_documents`
-Ищет информацию в базе знаний.
-
-**Параметры:**
-- `query` (string) - Поисковый запрос
-- `limit` (number, опционально) - Максимальное количество результатов
-
-#### `add_document`
-Добавляет новый документ в базу знаний.
-
-**Параметры:**
-- `title` (string) - Заголовок документа
-- `content` (string) - Содержимое документа
-- `type` (manual|reference|tutorial|configuration, опционально) - Тип документа
-- `category` (string, опционально) - Категория документа
-- `tags` (string[], опционально) - Теги документа
+- `variableType` (string, опционально): Тип переменной
+- `address` (number, опционально): Адрес переменной
+- `machineId` (string, опционально): ID машины
+- `hours` (number, опционально): Количество часов назад (по умолчанию: 24)
+- `limit` (number, опционально): Максимальное количество записей (по умолчанию: 1000)
 
 ### Analytics Tools
 
@@ -166,30 +153,49 @@ docker run -p 3001:3001 pmac-mcp-server
 Анализирует тренды в данных PMAC.
 
 **Параметры:**
-- `variableType` (P|Q|I|M|L) - Тип переменной для анализа
-- `address` (number) - Адрес переменной
-- `hours` (number, опционально) - Количество часов для анализа
-- `machineId` (string, опционально) - ID машины
+- `variableType` (string): Тип переменной для анализа
+- `address` (number): Адрес переменной
+- `hours` (number, опционально): Количество часов для анализа
+- `machineId` (string, опционально): ID машины
 
 #### `detect_anomalies`
 Обнаруживает аномалии в данных PMAC.
 
 **Параметры:**
-- `variableType` (P|Q|I|M|L) - Тип переменной для анализа
-- `address` (number) - Адрес переменной
-- `hours` (number, опционально) - Количество часов для анализа
-- `machineId` (string, опционально) - ID машины
-- `threshold` (number, опционально) - Порог для обнаружения аномалий
+- `variableType` (string): Тип переменной для анализа
+- `address` (number): Адрес переменной
+- `hours` (number, опционально): Количество часов для анализа
+- `machineId` (string, опционально): ID машины
+- `threshold` (number, опционально): Порог для обнаружения аномалий
 
 #### `export_data`
 Экспортирует данные PMAC в различных форматах.
 
 **Параметры:**
-- `variableType` (P|Q|I|M|L, опционально) - Тип переменной
-- `address` (number, опционально) - Адрес переменной
-- `hours` (number, опционально) - Количество часов назад
-- `machineId` (string, опционально) - ID машины
-- `format` (json|csv|summary, опционально) - Формат экспорта
+- `variableType` (string, опционально): Тип переменной
+- `address` (number, опционально): Адрес переменной
+- `hours` (number, опционально): Количество часов назад
+- `machineId` (string, опционально): ID машины
+- `format` (string, опционально): Формат экспорта ("json", "csv", "summary")
+
+### Knowledge Base Tools
+
+#### `search_documents`
+Ищет информацию в базе знаний.
+
+**Параметры:**
+- `query` (string): Поисковый запрос
+- `limit` (number, опционально): Максимальное количество результатов
+
+#### `add_document`
+Добавляет новый документ в базу знаний.
+
+**Параметры:**
+- `title` (string): Заголовок документа
+- `content` (string): Содержимое документа
+- `type` (string, опционально): Тип документа
+- `category` (string, опционально): Категория документа
+- `tags` (array, опционально): Теги документа
 
 ### Recommendation Tools
 
@@ -197,61 +203,81 @@ docker run -p 3001:3001 pmac-mcp-server
 Генерирует рекомендации на основе текущего состояния PMAC.
 
 **Параметры:**
-- `machineId` (string, опционально) - ID машины
-- `focus` (performance|safety|maintenance|optimization, опционально) - Фокус рекомендаций
-- `hours` (number, опционально) - Количество часов для анализа
+- `focus` (string, опционально): Фокус рекомендаций ("performance", "safety", "maintenance", "optimization")
+- `machineId` (string, опционально): ID машины
+- `hours` (number, опционально): Количество часов для анализа
 
 #### `analyze_performance`
-Анализирует производительность PMAC и предлагает улучшения.
+Анализирует производительность PMAC.
 
 **Параметры:**
-- `machineId` (string, опционально) - ID машины
-- `hours` (number, опционально) - Количество часов для анализа
+- `machineId` (string, опционально): ID машины
+- `hours` (number, опционально): Количество часов для анализа
+- `metrics` (array, опционально): Метрики для анализа
 
 #### `check_safety`
 Проверяет безопасность операций PMAC.
 
 **Параметры:**
-- `machineId` (string, опционально) - ID машины
-- `hours` (number, опционально) - Количество часов для анализа
-
-## Тестирование
-
-### Запуск тестового клиента
-
-```bash
-node test-mcp-client.js
-```
-
-### Проверка здоровья сервера
-
-```bash
-curl http://localhost:3001/health
-```
+- `machineId` (string, опционально): ID машины
+- `checkType` (string, опционально): Тип проверки ("comprehensive", "quick", "critical")
 
 ## API Endpoints
 
-### MCP Protocol
-- `POST /mcp` - Клиент-серверная коммуникация
-- `GET /mcp` - Сервер-клиентские уведомления (SSE)
-- `DELETE /mcp` - Завершение сессии
-
 ### Health Check
-- `GET /health` - Проверка состояния сервера
+```
+GET /health
+```
+
+### MCP Endpoints
+```
+GET /mcp    # SSE соединение
+POST /mcp   # Вызов инструментов
+```
 
 ## Безопасность
 
-- DNS rebinding protection включена по умолчанию
-- Подтверждение для критических операций
-- Валидация входных параметров
-- Логирование всех операций
+### Критические переменные и команды
+
+Система автоматически определяет критические операции:
+
+**Критические переменные:**
+- P1-P5, Q1-Q5, I1-I5, M1-M5, L1-L5
+
+**Критические команды:**
+- `&` - Остановка движения
+- `!` - Аварийная остановка
+- `R` - Сброс
+- `X` - Сброс ошибок
+- `Z` - Обнуление координат
+
+Для выполнения критических операций требуется параметр `confirm: true`.
+
+### Логирование
+
+Все операции логируются с указанием:
+- Времени выполнения
+- Пользователя/сессии
+- Параметров операции
+- Результата выполнения
 
 ## Мониторинг
 
-Сервер предоставляет подробное логирование через Winston:
-- Консольный вывод
-- Файлы логов в папке `logs/`
-- Уровни логирования: error, warn, info, debug
+### Метрики
+
+Сервер предоставляет следующие метрики:
+- Количество активных сессий
+- Время отклика на запросы
+- Количество ошибок
+- Использование памяти и CPU
+
+### Логи
+
+Логи сохраняются в файл и содержат:
+- Уровень логирования (debug, info, warn, error)
+- Временную метку
+- Контекст операции
+- Детали ошибок
 
 ## Разработка
 
@@ -259,31 +285,65 @@ curl http://localhost:3001/health
 
 ```
 src/
-├── index.ts              # Основной файл сервера
+├── index.ts              # Главный файл сервера
 ├── config.ts             # Конфигурация
-├── services/             # Сервисы
+├── utils/
+│   └── logger.ts         # Логирование
+├── services/
 │   ├── database.ts       # Работа с базой данных
 │   ├── redis.ts          # Работа с Redis
 │   └── pmac-simulator.ts # Симулятор PMAC
-├── tools/                # Инструменты MCP
-│   ├── pmac-tools.ts     # Инструменты PMAC
-│   ├── knowledge-tools.ts # Инструменты базы знаний
-│   ├── analytics-tools.ts # Инструменты аналитики
-│   └── recommendation-tools.ts # Инструменты рекомендаций
-└── utils/
-    └── logger.ts         # Система логирования
+└── tools/
+    ├── pmac-tools.ts     # Инструменты PMAC
+    ├── analytics-tools.ts # Инструменты аналитики
+    ├── knowledge-tools.ts # Инструменты базы знаний
+    └── recommendation-tools.ts # Инструменты рекомендаций
 ```
 
 ### Добавление новых инструментов
 
-1. Создайте новый файл в папке `tools/`
-2. Экспортируйте функцию настройки инструментов
-3. Импортируйте и вызовите функцию в `index.ts`
+1. Создайте схему для инструмента в соответствующем файле
+2. Добавьте обработчик с помощью `server.setRequestHandler()`
+3. Обновите документацию
+4. Добавьте тесты
 
-### Расширение симулятора PMAC
+### Тестирование
 
-Для добавления новых функций в симулятор отредактируйте `services/pmac-simulator.ts`.
+```bash
+# Запуск тестов
+npm test
+
+# Тестирование с помощью клиента
+node test-mcp-client.js
+```
+
+## Устранение неполадок
+
+### Частые проблемы
+
+1. **Ошибка подключения к базе данных**
+   - Проверьте настройки DATABASE_URL
+   - Убедитесь, что PostgreSQL запущен
+
+2. **Ошибка подключения к Redis**
+   - Проверьте настройки REDIS_URL
+   - Убедитесь, что Redis запущен
+
+3. **Ошибки PMAC**
+   - Проверьте настройки PMAC_HOST и PMAC_PORT
+   - Убедитесь, что контроллер доступен
+
+### Логи
+
+Проверьте логи для диагностики проблем:
+```bash
+tail -f logs/mcp-server.log
+```
 
 ## Лицензия
 
 MIT License
+
+## Поддержка
+
+Для получения поддержки создайте issue в репозитории проекта.

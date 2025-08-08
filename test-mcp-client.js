@@ -1,85 +1,137 @@
-import { Client } from "@modelcontextprotocol/sdk/client/index.js";
-import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
+const http = require('http');
 
+// Простой тестовый клиент для MCP сервера
 async function testMCPServer() {
-  console.log("Тестирование MCP сервера PMAC Assistant...");
+  console.log('Тестирование MCP сервера...\n');
 
+  // Тест 1: Health check
+  console.log('1. Проверка health endpoint...');
   try {
-    // Создаем клиент
-    const client = new Client({
-      name: "test-client",
-      version: "1.0.0"
-    });
-
-    // Подключаемся к серверу
-    const transport = new StreamableHTTPClientTransport(
-      new URL("http://localhost:3001")
-    );
-
-    await client.connect(transport);
-    console.log("✅ Подключение к MCP серверу установлено");
-
-    // Получаем список инструментов
-    const tools = await client.listTools();
-    console.log(`📋 Доступно инструментов: ${tools.tools.length}`);
-    
-    tools.tools.forEach(tool => {
-      console.log(`  - ${tool.name}: ${tool.description}`);
-    });
-
-    // Тестируем чтение переменной PMAC
-    console.log("\n🔧 Тестирование чтения переменной PMAC...");
-    const readResult = await client.callTool({
-      name: "read_pmac_variable",
-      arguments: {
-        variableType: "P",
-        address: 1,
-        machineId: "test-machine"
-      }
-    });
-    console.log("Результат:", readResult.content[0].text);
-
-    // Тестируем получение статуса PMAC
-    console.log("\n📊 Тестирование получения статуса PMAC...");
-    const statusResult = await client.callTool({
-      name: "get_pmac_status",
-      arguments: {
-        machineId: "test-machine"
-      }
-    });
-    console.log("Статус PMAC получен");
-
-    // Тестируем анализ трендов
-    console.log("\n📈 Тестирование анализа трендов...");
-    const trendResult = await client.callTool({
-      name: "analyze_trends",
-      arguments: {
-        variableType: "P",
-        address: 1,
-        hours: 1,
-        machineId: "test-machine"
-      }
-    });
-    console.log("Анализ трендов:", trendResult.content[0].text);
-
-    // Тестируем генерацию рекомендаций
-    console.log("\n💡 Тестирование генерации рекомендаций...");
-    const recResult = await client.callTool({
-      name: "generate_recommendations",
-      arguments: {
-        machineId: "test-machine",
-        focus: "performance",
-        hours: 1
-      }
-    });
-    console.log("Рекомендации:", recResult.content[0].text);
-
-    console.log("\n✅ Все тесты выполнены успешно!");
-
+    const healthResponse = await makeRequest('GET', '/health');
+    console.log('✅ Health check успешен:', healthResponse);
   } catch (error) {
-    console.error("❌ Ошибка при тестировании:", error);
+    console.log('❌ Health check не удался:', error.message);
   }
+
+  // Тест 2: Чтение переменной PMAC
+  console.log('\n2. Тест чтения переменной PMAC...');
+  try {
+    const readResponse = await makeRequest('POST', '/mcp', {
+      method: 'tools/call',
+      params: {
+        name: 'read_pmac_variable',
+        arguments: {
+          variableType: 'P',
+          address: 1,
+          machineId: 'test-machine'
+        }
+      }
+    });
+    console.log('✅ Чтение переменной PMAC успешно:', readResponse);
+  } catch (error) {
+    console.log('❌ Чтение переменной PMAC не удалось:', error.message);
+  }
+
+  // Тест 3: Получение статуса PMAC
+  console.log('\n3. Тест получения статуса PMAC...');
+  try {
+    const statusResponse = await makeRequest('POST', '/mcp', {
+      method: 'tools/call',
+      params: {
+        name: 'get_pmac_status',
+        arguments: {
+          machineId: 'test-machine'
+        }
+      }
+    });
+    console.log('✅ Получение статуса PMAC успешно:', statusResponse);
+  } catch (error) {
+    console.log('❌ Получение статуса PMAC не удалось:', error.message);
+  }
+
+  // Тест 4: Анализ трендов
+  console.log('\n4. Тест анализа трендов...');
+  try {
+    const trendsResponse = await makeRequest('POST', '/mcp', {
+      method: 'tools/call',
+      params: {
+        name: 'analyze_trends',
+        arguments: {
+          variableType: 'P',
+          address: 1,
+          hours: 24,
+          machineId: 'test-machine'
+        }
+      }
+    });
+    console.log('✅ Анализ трендов успешен:', trendsResponse);
+  } catch (error) {
+    console.log('❌ Анализ трендов не удался:', error.message);
+  }
+
+  // Тест 5: Генерация рекомендаций
+  console.log('\n5. Тест генерации рекомендаций...');
+  try {
+    const recommendationsResponse = await makeRequest('POST', '/mcp', {
+      method: 'tools/call',
+      params: {
+        name: 'generate_recommendations',
+        arguments: {
+          focus: 'performance',
+          machineId: 'test-machine',
+          hours: 24
+        }
+      }
+    });
+    console.log('✅ Генерация рекомендаций успешна:', recommendationsResponse);
+  } catch (error) {
+    console.log('❌ Генерация рекомендаций не удалась:', error.message);
+  }
+
+  console.log('\n🎉 Тестирование завершено!');
 }
 
-// Запускаем тест
+function makeRequest(method, path, data = null) {
+  return new Promise((resolve, reject) => {
+    const options = {
+      hostname: 'localhost',
+      port: 3000,
+      path: path,
+      method: method,
+      headers: {
+        'Content-Type': 'application/json',
+      }
+    };
+
+    const req = http.request(options, (res) => {
+      let body = '';
+      res.on('data', (chunk) => {
+        body += chunk;
+      });
+      res.on('end', () => {
+        try {
+          const response = body ? JSON.parse(body) : null;
+          if (res.statusCode >= 200 && res.statusCode < 300) {
+            resolve(response);
+          } else {
+            reject(new Error(`HTTP ${res.statusCode}: ${body}`));
+          }
+        } catch (error) {
+          reject(new Error(`Ошибка парсинга ответа: ${error.message}`));
+        }
+      });
+    });
+
+    req.on('error', (error) => {
+      reject(new Error(`Ошибка запроса: ${error.message}`));
+    });
+
+    if (data) {
+      req.write(JSON.stringify(data));
+    }
+    req.end();
+  });
+}
+
+// Запуск тестов
 testMCPServer().catch(console.error);
