@@ -10,7 +10,9 @@ CREATE TABLE IF NOT EXISTS pmac_data (
     variable_type CHAR(1),
     variable_address INTEGER,
     value DOUBLE PRECISION,
-    quality TEXT DEFAULT 'good'
+    quality TEXT DEFAULT 'good',
+    collection_job_id TEXT,
+    metadata JSONB DEFAULT '{}'
 );
 
 -- Создание hypertable для оптимизации временных рядов
@@ -80,6 +82,40 @@ CREATE TABLE IF NOT EXISTS recommendations (
     created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
+-- Таблица конфигураций сбора данных
+CREATE TABLE IF NOT EXISTS collection_configs (
+    id TEXT PRIMARY KEY,
+    name TEXT NOT NULL,
+    type TEXT NOT NULL,
+    enabled BOOLEAN DEFAULT true,
+    interval_ms INTEGER NOT NULL,
+    batch_size INTEGER DEFAULT 100,
+    timeout_ms INTEGER DEFAULT 10000,
+    retry_attempts INTEGER DEFAULT 3,
+    retry_delay_ms INTEGER DEFAULT 5000,
+    variables JSONB DEFAULT '[]',
+    metadata JSONB DEFAULT '{}',
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- Таблица заданий сбора данных
+CREATE TABLE IF NOT EXISTS collection_jobs (
+    id TEXT PRIMARY KEY,
+    config_id TEXT REFERENCES collection_configs(id),
+    status TEXT NOT NULL,
+    type TEXT NOT NULL,
+    start_time TIMESTAMPTZ NOT NULL,
+    end_time TIMESTAMPTZ,
+    duration_ms INTEGER,
+    records_collected INTEGER DEFAULT 0,
+    error_message TEXT,
+    retry_count INTEGER DEFAULT 0,
+    last_heartbeat TIMESTAMPTZ,
+    metadata JSONB DEFAULT '{}',
+    created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
 -- Таблица аудита операций
 CREATE TABLE IF NOT EXISTS audit_log (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -105,6 +141,12 @@ CREATE INDEX IF NOT EXISTS idx_sessions_token ON sessions (token);
 CREATE INDEX IF NOT EXISTS idx_recommendations_status ON recommendations (status);
 CREATE INDEX IF NOT EXISTS idx_audit_log_user_id ON audit_log (user_id);
 CREATE INDEX IF NOT EXISTS idx_audit_log_created_at ON audit_log (created_at);
+CREATE INDEX IF NOT EXISTS idx_collection_configs_enabled ON collection_configs (enabled);
+CREATE INDEX IF NOT EXISTS idx_collection_configs_type ON collection_configs (type);
+CREATE INDEX IF NOT EXISTS idx_collection_jobs_config_id ON collection_jobs (config_id);
+CREATE INDEX IF NOT EXISTS idx_collection_jobs_status ON collection_jobs (status);
+CREATE INDEX IF NOT EXISTS idx_collection_jobs_start_time ON collection_jobs (start_time);
+CREATE INDEX IF NOT EXISTS idx_collection_jobs_type ON collection_jobs (type);
 
 -- Функция для обновления updated_at
 CREATE OR REPLACE FUNCTION update_updated_at_column()
@@ -120,4 +162,7 @@ CREATE TRIGGER update_documents_updated_at BEFORE UPDATE ON documents
     FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 
 CREATE TRIGGER update_users_updated_at BEFORE UPDATE ON users
+    FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+
+CREATE TRIGGER update_collection_configs_updated_at BEFORE UPDATE ON collection_configs
     FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();

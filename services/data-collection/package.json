@@ -1,0 +1,52 @@
+{
+  "name": "@pmac/data-collection",
+  "version": "1.0.0",
+  "description": "Data Collection Service for PMAC Assistant System",
+  "main": "dist/index.js",
+  "type": "module",
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsx watch src/index.ts",
+    "start": "node dist/index.js",
+    "clean": "rimraf dist",
+    "test": "jest",
+    "test:client": "node test-dc-client.js",
+    "lint": "eslint src --ext .ts"
+  },
+  "dependencies": {
+    "express": "^4.18.2",
+    "cors": "^2.8.5",
+    "dotenv": "^16.3.1",
+    "pg": "^8.11.3",
+    "redis": "^4.6.8",
+    "winston": "^3.10.0",
+    "zod": "^3.22.2",
+    "node-cron": "^3.0.2",
+    "axios": "^1.5.0",
+    "uuid": "^9.0.0",
+    "@pmac/shared-types": "file:../../packages/shared-types"
+  },
+  "devDependencies": {
+    "@types/node": "^20.5.0",
+    "@types/express": "^4.17.17",
+    "@types/cors": "^2.8.13",
+    "@types/pg": "^8.10.2",
+    "@types/node-cron": "^3.0.8",
+    "@types/uuid": "^9.0.2",
+    "typescript": "^5.1.6",
+    "tsx": "^3.12.7",
+    "rimraf": "^5.0.1",
+    "jest": "^29.6.2",
+    "@types/jest": "^29.5.4",
+    "eslint": "^8.46.0",
+    "@typescript-eslint/eslint-plugin": "^6.2.1",
+    "@typescript-eslint/parser": "^6.2.1"
+  },
+  "keywords": [
+    "pmac",
+    "data-collection",
+    "timeseries",
+    "postgresql",
+    "redis"
+  ]
+}

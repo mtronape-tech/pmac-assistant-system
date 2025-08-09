@@ -124,19 +124,57 @@ services:
     networks:
       - pmac-network
 
-  # Data Collection Service (Go)
+  # PMAC Control Service
+  pmac-control:
+    build:
+      context: ./services/pmac-control
+      dockerfile: Dockerfile.dev
+    container_name: pmac-pmac-control
+    ports:
+      - "3007:3007"
+    environment:
+      NODE_ENV: development
+      PORT: 3007
+      PMAC_MODE: simulation
+      LOG_LEVEL: info
+    volumes:
+      - ./services/pmac-control:/app
+      - /app/node_modules
+    networks:
+      - pmac-network
+
+  # Data Collection Service
   data-collection:
     build:
       context: ./services/data-collection
       dockerfile: Dockerfile.dev
     container_name: pmac-data-collection
+    ports:
+      - "3008:3008"
     environment:
-      DATABASE_URL: postgresql://pmac_user:pmac_password@postgres:5432/pmac_assistant
-      PMAC_MODE: simulation
+      NODE_ENV: development
+      PORT: 3008
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_NAME: pmac_assistant
+      DB_USER: pmac_user
+      DB_PASSWORD: pmac_password
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      PMAC_CONTROL_BASE_URL: http://pmac-control:3007
+      PMAC_CONTROL_ENABLED: true
+      COLLECTION_ENABLED: true
+      COLLECTION_INTERVAL: 5000
+      COLLECTION_BATCH_SIZE: 50
+      LOG_LEVEL: info
     volumes:
       - ./services/data-collection:/app
+      - /app/node_modules
+      - data_collection_logs:/app/logs
     depends_on:
       - postgres
+      - redis
+      - pmac-control
     networks:
       - pmac-network
 
@@ -204,6 +242,7 @@ volumes:
   weaviate_data:
   knowledge_uploads:
   knowledge_logs:
+  data_collection_logs:
 
 networks:
   pmac-network:
