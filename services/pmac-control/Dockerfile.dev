@@ -1,0 +1,52 @@
+FROM node:20-alpine
+
+# Устанавливаем рабочую директорию
+WORKDIR /app
+
+# Устанавливаем необходимые системные пакеты
+RUN apk add --no-cache \
+    python3 \
+    make \
+    g++ \
+    git
+
+# Копируем корневые файлы проекта
+COPY package*.json ./
+COPY tsconfig.json ./
+
+# Копируем shared-types пакет
+COPY packages/shared-types ./packages/shared-types/
+
+# Копируем исходники сервиса
+COPY services/pmac-control ./services/pmac-control/
+
+# Устанавливаем зависимости в корне
+RUN npm install
+
+# Собираем shared-types
+RUN cd packages/shared-types && npm run build
+
+# Переходим в директорию сервиса
+WORKDIR /app/services/pmac-control
+
+# Устанавливаем зависимости сервиса
+RUN npm install
+
+# Собираем сервис
+RUN npm run build
+
+# Создаем директорию для логов
+RUN mkdir -p logs
+
+# Открываем порт
+EXPOSE 3001
+
+# Переменные окружения по умолчанию
+ENV NODE_ENV=development
+ENV PMAC_CONTROL_PORT=3001
+ENV PMAC_CONTROL_HOST=0.0.0.0
+ENV PMAC_MODE=simulation
+ENV LOG_LEVEL=info
+
+# Запускаем сервис
+CMD ["npm", "run", "dev"]

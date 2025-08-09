@@ -38,6 +38,16 @@ export const config = {
     },
   },
   
+  // PMAC Control Service
+  pmacControl: {
+    enabled: process.env.PMAC_CONTROL_ENABLED !== 'false',
+    host: process.env.PMAC_CONTROL_HOST || 'localhost',
+    port: parseInt(process.env.PMAC_CONTROL_PORT || '3001', 10),
+    timeout: parseInt(process.env.PMAC_CONTROL_TIMEOUT || '5000', 10),
+    maxRetries: parseInt(process.env.PMAC_CONTROL_MAX_RETRIES || '3', 10),
+    retryDelayMs: parseInt(process.env.PMAC_CONTROL_RETRY_DELAY || '1000', 10),
+  },
+  
   // AI Models
   ai: {
     openai: {

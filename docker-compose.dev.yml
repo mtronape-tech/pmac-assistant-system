@@ -70,6 +70,35 @@ services:
     networks:
       - pmac-network
 
+  # Knowledge Base Service
+  knowledge-base:
+    build:
+      context: ./services/knowledge-base
+      dockerfile: Dockerfile.dev
+    container_name: pmac-knowledge-base
+    ports:
+      - "3002:3002"
+    environment:
+      NODE_ENV: development
+      WEAVIATE_URL: http://weaviate:8080
+      WEAVIATE_CLASS_NAME: PMACDocument
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      OPENROUTER_API_KEY: ${OPENROUTER_API_KEY:-}
+      AI_PROVIDER: ${AI_PROVIDER:-openrouter}
+      AI_MODEL: ${AI_MODEL:-openai/gpt-oss-20b:free}
+      EMBEDDING_MODEL: ${EMBEDDING_MODEL:-openai/text-embedding-3-small}
+      UPLOAD_DIR: /app/uploads
+      LOG_DIR: /app/logs
+    volumes:
+      - ./services/knowledge-base:/app
+      - /app/node_modules
+      - knowledge_uploads:/app/uploads
+      - knowledge_logs:/app/logs
+    depends_on:
+      - weaviate
+    networks:
+      - pmac-network
+
   # API Gateway
   api-gateway:
     build:
@@ -77,10 +106,11 @@ services:
       dockerfile: Dockerfile.dev
     container_name: pmac-api-gateway
     ports:
-      - "3002:3002"
+      - "3003:3003"
     environment:
       NODE_ENV: development
       MCP_SERVER_URL: http://mcp-server:3001
+      KNOWLEDGE_BASE_URL: http://knowledge-base:3002
       DATABASE_URL: postgresql://pmac_user:pmac_password@postgres:5432/pmac_assistant
       REDIS_URL: redis://redis:6379
     volumes:
@@ -88,6 +118,7 @@ services:
       - /app/node_modules
     depends_on:
       - mcp-server
+      - knowledge-base
       - postgres
       - redis
     networks:
@@ -116,7 +147,7 @@ services:
       dockerfile: Dockerfile.dev
     container_name: pmac-analytics
     ports:
-      - "3003:3003"
+      - "3004:3004"
     environment:
       DATABASE_URL: postgresql://pmac_user:pmac_password@postgres:5432/pmac_assistant
       REDIS_URL: redis://redis:6379
@@ -135,7 +166,7 @@ services:
       dockerfile: Dockerfile.dev
     container_name: pmac-recommendations
     ports:
-      - "3004:3004"
+      - "3005:3005"
     environment:
       DATABASE_URL: postgresql://pmac_user:pmac_password@postgres:5432/pmac_assistant
       REDIS_URL: redis://redis:6379
@@ -171,6 +202,8 @@ volumes:
   postgres_data:
   redis_data:
   weaviate_data:
+  knowledge_uploads:
+  knowledge_logs:
 
 networks:
   pmac-network:

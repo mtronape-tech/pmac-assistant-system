@@ -1,0 +1,22 @@
+FROM node:20-alpine
+
+WORKDIR /app
+
+# Копируем package.json и устанавливаем зависимости
+COPY package*.json ./
+RUN npm ci
+
+# Копируем исходный код
+COPY . .
+
+# Устанавливаем зависимости для разработки
+RUN npm install -g tsx
+
+# Создаем директории для логов и загрузок
+RUN mkdir -p logs uploads
+
+# Открываем порт
+EXPOSE 3002
+
+# Команда для разработки
+CMD ["npm", "run", "dev"]

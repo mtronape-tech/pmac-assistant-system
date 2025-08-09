@@ -6,6 +6,7 @@ import { randomUUID } from "node:crypto";
 import { config } from "./config.js";
 import { logger } from "./utils/logger.js";
 import { setupPMACTools } from "./tools/pmac-tools.js";
+import { setupPMACToolsSimple } from "./tools/pmac-tools-simple.js";
 import { setupKnowledgeBaseTools } from "./tools/knowledge-tools.js";
 import { setupAnalyticsTools } from "./tools/analytics-tools.js";
 import { setupRecommendationTools } from "./tools/recommendation-tools.js";
@@ -32,7 +33,14 @@ async function main() {
     });
 
     // Настройка инструментов
-    await setupPMACTools(server, database, redis);
+    // Используем новую версию PMAC Tools с PMAC Control Service
+    if (config.pmacControl.enabled) {
+      await setupPMACToolsSimple(server, database, redis);
+      logger.info("Используется PMAC Control Service для инструментов PMAC");
+    } else {
+      await setupPMACTools(server, database, redis);
+      logger.info("Используется встроенный симулятор PMAC");
+    }
     await setupKnowledgeBaseTools(server, database, redis);
     await setupAnalyticsTools(server, database, redis);
     await setupRecommendationTools(server, database, redis);
