@@ -1,6 +1,7 @@
 {
   "name": "@pmac/knowledge-base-service",
   "version": "1.0.0",
+  "type": "module",
   "description": "Knowledge Base Service - микросервис для управления базой знаний PMAC Assistant System",
   "main": "dist/index.js",
   "scripts": {
@@ -10,7 +11,9 @@
     "watch": "tsx --watch src/index.ts",
     "clean": "rimraf dist",
     "lint": "eslint src/**/*.ts",
-    "test": "jest"
+    "test": "jest",
+    "test-mode": "tsx src/index-test.ts",
+    "test-client": "node test-kb-client.js"
   },
   "keywords": [
     "pmac",
