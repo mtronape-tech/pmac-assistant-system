@@ -3,7 +3,7 @@ import cron from 'node-cron';
 import { appConfig } from '../config/index.js';
 import { logger } from '../utils/logger.js';
 import { DatabaseService } from './database.js';
-import { RedisService } from './redis.js';
+// Redis удален - используется in-memory кеширование
 import { PMACCollector } from '../collectors/pmac-collector.js';
 import {
   CollectionConfig,
@@ -24,7 +24,6 @@ export interface SchedulerStats {
 
 export class CollectionScheduler {
   private database: DatabaseService;
-  private redis: RedisService;
   private collector: PMACCollector;
   private isRunning = false;
   private scheduledJobs = new Map<string, NodeJS.Timeout>();
@@ -41,11 +40,9 @@ export class CollectionScheduler {
 
   constructor(
     database: DatabaseService,
-    redis: RedisService,
     collector: PMACCollector
   ) {
     this.database = database;
-    this.redis = redis;
     this.collector = collector;
   }
 
@@ -121,7 +118,7 @@ export class CollectionScheduler {
       await this.database.saveCollectionConfig(config);
       
       // Cache in Redis
-      await this.redis.cacheConfig(config);
+      // Config кеширование в памяти не требуется
 
       // Schedule the job
       await this.scheduleJob(config);
@@ -150,7 +147,7 @@ export class CollectionScheduler {
       }
 
       // Remove from cache
-      await this.redis.removeCachedConfig(configId);
+      // Config удаление из кеша в памяти не требуется
       
       logger.info(`Configuration removed`, { configId });
     } catch (error) {
@@ -205,14 +202,14 @@ export class CollectionScheduler {
         job.duration = job.endTime.getTime() - job.startTime.getTime();
         
         await this.database.saveCollectionJob(job);
-        await this.redis.removeRunningJob(jobId);
+        // Running job удаление из Redis не требуется - используется локальная Map
         this.runningJobs.delete(jobId);
         
         logger.info(`Job force stopped`, { jobId });
       } else {
         // Graceful stop - just mark for stopping
         job.metadata.stopRequested = true;
-        await this.redis.setRunningJob(jobId, job);
+        // Running job сохранение в Redis не требуется - используется локальная Map
         
         logger.info(`Job stop requested`, { jobId });
       }
@@ -237,7 +234,7 @@ export class CollectionScheduler {
       for (const config of configs) {
         if (config.enabled) {
           await this.scheduleJob(config);
-          await this.redis.cacheConfig(config);
+          // Config кеширование в памяти не требуется
         }
       }
       
@@ -323,7 +320,7 @@ export class CollectionScheduler {
       
       // Save to database and Redis
       await this.database.saveCollectionJob(job);
-      await this.redis.setRunningJob(job.id, job);
+      // Running job сохранение в Redis не требуется - используется локальная Map
 
       logger.info(`Starting job execution`, { jobId: job.id, configId: config.id });
 
@@ -395,24 +392,14 @@ export class CollectionScheduler {
 
       // Clean up
       await this.database.saveCollectionJob(job);
-      await this.redis.removeRunningJob(job.id);
+      // Running job удаление из Redis не требуется - используется локальная Map
       this.runningJobs.delete(job.id);
     }
   }
 
   private async getConfiguration(configId: string): Promise<CollectionConfig | null> {
-    // Try cache first
-    let config = await this.redis.getCachedConfig(configId);
-    
-    if (!config) {
-      // Fall back to database
-      config = await this.database.getCollectionConfig(configId);
-      
-      if (config) {
-        // Cache for next time
-        await this.redis.cacheConfig(config);
-      }
-    }
+    // Получаем конфигурацию прямо из базы данных (без кеширования Redis)
+    const config = await this.database.getCollectionConfig(configId);
     
     return config;
   }
@@ -455,7 +442,7 @@ export class CollectionScheduler {
     // Monitor heartbeats every 30 seconds
     setInterval(async () => {
       try {
-        const runningJobs = await this.redis.getAllRunningJobs();
+        const runningJobs = Array.from(this.runningJobs.values());
         const now = Date.now();
         
         for (const job of runningJobs) {
@@ -475,7 +462,7 @@ export class CollectionScheduler {
               job.duration = job.endTime.getTime() - job.startTime.getTime();
               
               await this.database.saveCollectionJob(job);
-              await this.redis.removeRunningJob(job.id);
+              // Running job удаление из Redis не требуется - используется локальная Map
               this.runningJobs.delete(job.id);
             }
           }

@@ -5,7 +5,7 @@ CREATE EXTENSION IF NOT EXISTS timescaledb;
 
 -- Создание таблицы для временных рядов данных PMAC
 CREATE TABLE IF NOT EXISTS pmac_data (
-    time TIMESTAMPTZ NOT NULL,
+    timestamp TIMESTAMPTZ NOT NULL,
     machine_id TEXT NOT NULL,
     variable_type CHAR(1),
     variable_address INTEGER,
@@ -16,11 +16,23 @@ CREATE TABLE IF NOT EXISTS pmac_data (
 );
 
 -- Создание hypertable для оптимизации временных рядов
-SELECT create_hypertable('pmac_data', 'time', if_not_exists => TRUE);
+SELECT create_hypertable('pmac_data', 'timestamp', if_not_exists => TRUE);
 
 -- Индексы для производительности
-CREATE INDEX IF NOT EXISTS idx_pmac_data_machine_time ON pmac_data (machine_id, time DESC);
-CREATE INDEX IF NOT EXISTS idx_pmac_data_variable_time ON pmac_data (variable_type, variable_address, time DESC);
+CREATE INDEX IF NOT EXISTS idx_pmac_data_machine_time ON pmac_data (machine_id, timestamp DESC);
+CREATE INDEX IF NOT EXISTS idx_pmac_data_variable_time ON pmac_data (variable_type, variable_address, timestamp DESC);
+
+-- Политики сжатия для оптимизации хранения (сжимать данные старше 1 дня)
+SELECT add_compression_policy('pmac_data', INTERVAL '1 day', if_not_exists => TRUE);
+
+-- Политика удаления старых данных (удалять данные старше 30 дней)
+SELECT add_retention_policy('pmac_data', INTERVAL '30 days', if_not_exists => TRUE);
+
+-- Настройка параллельной обработки для лучшей производительности
+ALTER TABLE pmac_data SET (
+    timescaledb.compress = TRUE,
+    timescaledb.compress_segmentby = 'machine_id, variable_type'
+);
 
 -- Таблица документов для базы знаний
 CREATE TABLE IF NOT EXISTS documents (

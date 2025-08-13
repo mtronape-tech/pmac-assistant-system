@@ -1,28 +1,35 @@
 import express from 'express';
 import cors from 'cors';
+import { createServer } from 'http';
 import { appConfig } from './config/index.js';
 import { logger } from './utils/logger.js';
 import { DatabaseService } from './services/database.js';
-import { RedisService } from './services/redis.js';
+// Redis удален - используется in-memory кеширование
 import { CollectionScheduler } from './services/collection-scheduler.js';
 import { PMACCollector } from './collectors/pmac-collector.js';
 import { CollectionController } from './controllers/collection-controller.js';
+import { WebSocketStreamer } from './services/websocket-streamer.js';
+import { QualityMonitor } from './services/quality-monitor.js';
 
 class DataCollectionServer {
   private app: express.Application;
+  private server: any;
   private database: DatabaseService;
-  private redis: RedisService;
   private scheduler: CollectionScheduler;
   private collector: PMACCollector;
   private controller: CollectionController;
+  private wsStreamer: WebSocketStreamer;
+  private qualityMonitor: QualityMonitor;
 
   constructor() {
     this.app = express();
+    this.server = createServer(this.app);
     this.database = new DatabaseService();
-    this.redis = new RedisService();
     this.collector = new PMACCollector();
-    this.scheduler = new CollectionScheduler(this.database, this.redis, this.collector);
-    this.controller = new CollectionController(this.database, this.redis, this.scheduler);
+    this.scheduler = new CollectionScheduler(this.database, this.collector);
+    this.controller = new CollectionController(this.database, this.scheduler);
+    this.wsStreamer = new WebSocketStreamer(this.server, this.database);
+    this.qualityMonitor = new QualityMonitor(this.database);
     
     this.setupMiddleware();
     this.setupRoutes();
@@ -75,6 +82,72 @@ class DataCollectionServer {
 
     // Statistics
     this.app.get('/api/stats', this.controller.getStats);
+
+    // WebSocket stats
+    this.app.get('/api/websocket/stats', (req, res) => {
+      const stats = this.wsStreamer.getStats();
+      res.json({
+        success: true,
+        data: stats,
+      });
+    });
+
+    // Quality monitoring endpoints
+    this.app.get('/api/quality/metrics/:machineId', async (req, res) => {
+      try {
+        const metrics = await this.qualityMonitor.getQualityMetrics(req.params.machineId);
+        res.json({
+          success: true,
+          data: metrics,
+        });
+      } catch (error) {
+        res.status(500).json({
+          success: false,
+          message: 'Failed to get quality metrics',
+          error: error.message,
+        });
+      }
+    });
+
+    this.app.get('/api/quality/alerts', async (req, res) => {
+      try {
+        const alerts = await this.qualityMonitor.getActiveAlerts();
+        res.json({
+          success: true,
+          data: alerts,
+        });
+      } catch (error) {
+        res.status(500).json({
+          success: false,
+          message: 'Failed to get alerts',
+          error: error.message,
+        });
+      }
+    });
+
+    this.app.post('/api/quality/alerts/:alertId/acknowledge', async (req, res) => {
+      try {
+        const success = await this.qualityMonitor.acknowledgeAlert(req.params.alertId);
+        res.json({
+          success,
+          message: success ? 'Alert acknowledged' : 'Alert not found',
+        });
+      } catch (error) {
+        res.status(500).json({
+          success: false,
+          message: 'Failed to acknowledge alert',
+          error: error.message,
+        });
+      }
+    });
+
+    this.app.get('/api/quality/stats', (req, res) => {
+      const stats = this.qualityMonitor.getStats();
+      res.json({
+        success: true,
+        data: stats,
+      });
+    });
 
     // Utility endpoints
     this.app.get('/api/collection-types', this.controller.getCollectionTypes);
@@ -178,8 +251,7 @@ class DataCollectionServer {
       logger.info('Connecting to database...');
       await this.database.connect();
 
-      logger.info('Connecting to Redis...');
-      await this.redis.connect();
+      logger.info('Redis отключен - используется in-memory кеширование');
 
       // Start scheduler if collection is enabled
       if (appConfig.collection.enabled) {
@@ -189,24 +261,38 @@ class DataCollectionServer {
         logger.info('Collection is disabled in configuration');
       }
 
+      // Start WebSocket streamer
+      logger.info('Starting WebSocket streamer...');
+      await this.wsStreamer.start();
+
+      // Start quality monitor
+      logger.info('Starting quality monitor...');
+      await this.qualityMonitor.start();
+
       // Start HTTP server
-      const server = this.app.listen(appConfig.port, appConfig.host, () => {
+      this.server.listen(appConfig.port, appConfig.host, () => {
         logger.info(`Data Collection Service listening on ${appConfig.host}:${appConfig.port}`);
+        logger.info(`WebSocket endpoint available at ws://${appConfig.host}:${appConfig.port}/ws/data-stream`);
       });
 
       // Graceful shutdown
       const gracefulShutdown = async (signal: string) => {
         logger.info(`Received ${signal}, starting graceful shutdown...`);
 
-        server.close(async () => {
+        this.server.close(async () => {
           try {
+            logger.info('Stopping quality monitor...');
+            await this.qualityMonitor.stop();
+
+            logger.info('Stopping WebSocket streamer...');
+            await this.wsStreamer.stop();
+
             if (appConfig.collection.enabled) {
               logger.info('Stopping collection scheduler...');
               await this.scheduler.stop();
             }
 
-            logger.info('Disconnecting from Redis...');
-            await this.redis.disconnect();
+            logger.info('Redis отключен - нечего отключать');
 
             logger.info('Disconnecting from database...');
             await this.database.disconnect();

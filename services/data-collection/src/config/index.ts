@@ -14,17 +14,11 @@ const ConfigSchema = z.object({
     port: z.coerce.number().default(5432),
     database: z.string().default('pmac_assistant'),
     username: z.string().default('postgres'),
-    password: z.string().default('postgres'),
+    password: z.string().default('3852'),
     ssl: z.boolean().default(false),
   }),
   
-  // Redis
-  redis: z.object({
-    host: z.string().default('localhost'),
-    port: z.coerce.number().default(6379),
-    password: z.string().optional(),
-    db: z.coerce.number().default(0),
-  }),
+  // Redis отключен - используется in-memory кеширование
   
   // PMAC Control Service
   pmacControl: z.object({
@@ -62,12 +56,7 @@ export const appConfig = ConfigSchema.parse({
     ssl: process.env.DB_SSL === 'true',
   },
   
-  redis: {
-    host: process.env.REDIS_HOST,
-    port: process.env.REDIS_PORT,
-    password: process.env.REDIS_PASSWORD,
-    db: process.env.REDIS_DB,
-  },
+  // Redis отключен
   
   pmacControl: {
     baseUrl: process.env.PMAC_CONTROL_BASE_URL,

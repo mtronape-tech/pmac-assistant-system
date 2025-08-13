@@ -17,7 +17,8 @@ export class DatabaseService {
       ssl: appConfig.database.ssl,
       max: 20,
       idleTimeoutMillis: 30000,
-      connectionTimeoutMillis: 2000,
+      connectionTimeoutMillis: 10000,
+      query_timeout: 5000,
     });
 
     this.pool.on('error', (err) => {
@@ -60,9 +61,9 @@ export class DatabaseService {
     try {
       const query = `
         INSERT INTO pmac_data (
-          time, machine_id, variable_type, variable_address, 
-          value, quality, metadata
-        ) VALUES ($1, $2, $3, $4, $5, $6, $7)
+          timestamp, machine_id, variable_type, variable_address, 
+          value, quality, collection_job_id, metadata
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
       `;
       const values = [
         dataPoint.timestamp,
@@ -71,6 +72,7 @@ export class DatabaseService {
         dataPoint.variableAddress,
         dataPoint.value,
         dataPoint.quality,
+        dataPoint.collectionJobId,
         JSON.stringify(dataPoint.metadata),
       ];
       
@@ -91,32 +93,45 @@ export class DatabaseService {
 
     const client = await this.pool.connect();
     try {
-      await client.query('BEGIN');
+      // Используем эффективную batch вставку с VALUES списком
+      const batchSize = 1000; // Оптимальный размер для PostgreSQL
       
-      const query = `
-        INSERT INTO pmac_data (
-          time, machine_id, variable_type, variable_address, 
-          value, quality, metadata
-        ) VALUES ($1, $2, $3, $4, $5, $6, $7)
-      `;
-      
-      for (const dataPoint of dataPoints) {
-        const values = [
-          dataPoint.timestamp,
-          dataPoint.machineId,
-          dataPoint.variableType,
-          dataPoint.variableAddress,
-          dataPoint.value,
-          dataPoint.quality,
-          JSON.stringify(dataPoint.metadata),
-        ];
-        await client.query(query, values);
+      for (let i = 0; i < dataPoints.length; i += batchSize) {
+        const batch = dataPoints.slice(i, i + batchSize);
+        
+        // Создаем VALUES строку для batch insert
+        const valueStrings: string[] = [];
+        const allValues: any[] = [];
+        
+        batch.forEach((dataPoint, index) => {
+          const baseIndex = index * 8;
+          valueStrings.push(
+            `($${baseIndex + 1}, $${baseIndex + 2}, $${baseIndex + 3}, $${baseIndex + 4}, $${baseIndex + 5}, $${baseIndex + 6}, $${baseIndex + 7}, $${baseIndex + 8})`
+          );
+          allValues.push(
+            dataPoint.timestamp,
+            dataPoint.machineId,
+            dataPoint.variableType,
+            dataPoint.variableAddress,
+            dataPoint.value,
+            dataPoint.quality,
+            dataPoint.collectionJobId,
+            JSON.stringify(dataPoint.metadata)
+          );
+        });
+        
+        const query = `
+          INSERT INTO pmac_data (
+            timestamp, machine_id, variable_type, variable_address, 
+            value, quality, collection_job_id, metadata
+          ) VALUES ${valueStrings.join(', ')}
+        `;
+        
+        await client.query(query, allValues);
       }
       
-      await client.query('COMMIT');
-      logger.info(`Saved ${dataPoints.length} data points in batch`);
+      logger.info(`Saved ${dataPoints.length} data points using efficient batch insert`);
     } catch (error) {
-      await client.query('ROLLBACK');
       logger.error('Failed to save data points batch:', error);
       throw error;
     } finally {
@@ -135,10 +150,10 @@ export class DatabaseService {
     const client = await this.pool.connect();
     try {
       let query = `
-        SELECT time, machine_id, variable_type, variable_address, 
-               value, quality, metadata
+        SELECT timestamp, machine_id, variable_type, variable_address, 
+               value, quality, collection_job_id, metadata
         FROM pmac_data 
-        WHERE machine_id = $1 AND time >= $2 AND time <= $3
+        WHERE machine_id = $1 AND timestamp >= $2 AND timestamp <= $3
       `;
       const params: any[] = [machineId, startTime, endTime];
       
@@ -152,20 +167,20 @@ export class DatabaseService {
         params.push(variableAddress);
       }
       
-      query += ` ORDER BY time DESC LIMIT $${params.length + 1}`;
+      query += ` ORDER BY timestamp DESC LIMIT $${params.length + 1}`;
       params.push(limit);
       
       const result = await client.query(query, params);
       
       return result.rows.map(row => ({
-        timestamp: row.time,
+        timestamp: row.timestamp,
         machineId: row.machine_id,
         variableType: row.variable_type,
         variableAddress: row.variable_address,
         value: row.value,
         quality: row.quality,
-        collectionJobId: undefined, // Not stored in simplified schema
-        metadata: row.metadata || {},
+        collectionJobId: row.collection_job_id,
+        metadata: typeof row.metadata === 'string' ? JSON.parse(row.metadata) : row.metadata || {},
       }));
     } finally {
       client.release();
@@ -210,6 +225,58 @@ export class DatabaseService {
       
       await client.query(query, values);
       logger.info('Collection config saved', { configId: config.id });
+    } finally {
+      client.release();
+    }
+  }
+
+  async createCollectionConfig(config: CollectionConfig): Promise<CollectionConfig> {
+    const client = await this.pool.connect();
+    try {
+      const query = `
+        INSERT INTO collection_configs (
+          id, name, type, enabled, interval_ms, batch_size, 
+          timeout_ms, retry_attempts, retry_delay_ms, variables, metadata,
+          created_at, updated_at
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, NOW(), NOW())
+        RETURNING id, name, type, enabled, interval_ms, batch_size,
+                  timeout_ms, retry_attempts, retry_delay_ms, variables, metadata,
+                  created_at, updated_at
+      `;
+      
+      const values = [
+        config.id,
+        config.name,
+        config.type || 'scheduled',
+        config.enabled,
+        config.interval,
+        config.batchSize,
+        config.timeout,
+        config.retryAttempts,
+        config.retryDelay,
+        JSON.stringify(config.variables || []),
+        JSON.stringify(config.metadata || {}),
+      ];
+      
+      const result = await client.query(query, values);
+      const row = result.rows[0];
+      
+      const savedConfig: CollectionConfig = {
+        id: row.id,
+        name: row.name,
+        type: row.type,
+        enabled: row.enabled,
+        interval: row.interval_ms,
+        batchSize: row.batch_size,
+        timeout: row.timeout_ms,
+        retryAttempts: row.retry_attempts,
+        retryDelay: row.retry_delay_ms,
+        variables: typeof row.variables === 'string' ? JSON.parse(row.variables) : row.variables || [],
+        metadata: typeof row.metadata === 'string' ? JSON.parse(row.metadata) : row.metadata || {},
+      };
+      
+      logger.info('Collection config created', { configId: savedConfig.id });
+      return savedConfig;
     } finally {
       client.release();
     }
@@ -383,6 +450,94 @@ export class DatabaseService {
         collectionsPerSecond: totalJobs > 0 ? totalJobs / (24 * 60 * 60) : 0,
         errorRate,
       };
+    } finally {
+      client.release();
+    }
+  }
+
+  // Data aggregation methods for analytics
+  async getAggregatedData(
+    machineId: string,
+    startTime: Date,
+    endTime: Date,
+    variableType: string,
+    variableAddress: number,
+    interval: '1m' | '5m' | '15m' | '1h' | '1d' = '5m'
+  ): Promise<Array<{timestamp: Date, avg: number, min: number, max: number, count: number}>> {
+    const client = await this.pool.connect();
+    try {
+      const query = `
+        SELECT 
+          time_bucket('${interval}', timestamp) as bucket,
+          AVG(value) as avg_value,
+          MIN(value) as min_value,
+          MAX(value) as max_value,
+          COUNT(*) as data_points
+        FROM pmac_data 
+        WHERE machine_id = $1 
+          AND timestamp >= $2 
+          AND timestamp <= $3
+          AND variable_type = $4 
+          AND variable_address = $5
+          AND quality = 'good'
+        GROUP BY bucket
+        ORDER BY bucket ASC
+      `;
+      
+      const result = await client.query(query, [
+        machineId, 
+        startTime, 
+        endTime, 
+        variableType, 
+        variableAddress
+      ]);
+      
+      return result.rows.map(row => ({
+        timestamp: row.bucket,
+        avg: parseFloat(row.avg_value),
+        min: parseFloat(row.min_value),
+        max: parseFloat(row.max_value),
+        count: parseInt(row.data_points),
+      }));
+    } finally {
+      client.release();
+    }
+  }
+
+  async getLatestValues(
+    machineId: string,
+    variableType?: string
+  ): Promise<DataPoint[]> {
+    const client = await this.pool.connect();
+    try {
+      let query = `
+        SELECT DISTINCT ON (variable_type, variable_address)
+          timestamp, machine_id, variable_type, variable_address,
+          value, quality, collection_job_id, metadata
+        FROM pmac_data 
+        WHERE machine_id = $1
+      `;
+      const params: any[] = [machineId];
+      
+      if (variableType) {
+        query += ` AND variable_type = $2`;
+        params.push(variableType);
+      }
+      
+      query += ` ORDER BY variable_type, variable_address, timestamp DESC`;
+      
+      const result = await client.query(query, params);
+      
+      return result.rows.map(row => ({
+        timestamp: row.timestamp,
+        machineId: row.machine_id,
+        variableType: row.variable_type,
+        variableAddress: row.variable_address,
+        value: row.value,
+        quality: row.quality,
+        collectionJobId: row.collection_job_id,
+        metadata: typeof row.metadata === 'string' ? JSON.parse(row.metadata) : row.metadata || {},
+      }));
     } finally {
       client.release();
     }

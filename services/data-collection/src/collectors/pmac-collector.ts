@@ -143,70 +143,139 @@ export class PMACCollector {
       const timestamp = new Date();
       const machineId = job.metadata.machineId || 'pmac-001';
 
-      // Collect variables in batches to avoid overwhelming the PMAC
-      const batchSize = Math.min(config.batchSize, 50);
+      // Улучшенная логика batch обработки с динамическим размером
+      let batchSize = Math.min(config.batchSize, 50);
+      let consecutiveErrors = 0;
+      
       for (let i = 0; i < config.variables.length; i += batchSize) {
+        // Проверяем, не запросили ли остановку задачи
+        if (job.metadata.stopRequested) {
+          logger.info('Collection stop requested, aborting variable collection', { jobId: job.id });
+          break;
+        }
+
         const batch = config.variables.slice(i, i + batchSize);
+        let batchErrors = 0;
         
-        for (const variable of batch) {
+        // Используем Promise.allSettled для параллельного чтения переменных в batch
+        const batchPromises = batch.map(async (variable) => {
           try {
+            const startTime = Date.now();
             const value = await this.readVariable(variable.type, variable.address);
+            const readTime = Date.now() - startTime;
             
-            dataPoints.push({
-              timestamp,
-              machineId,
-              variableType: variable.type,
-              variableAddress: variable.address,
-              value,
-              quality: 'good',
-              collectionJobId: job.id,
-              metadata: {
-                variableName: variable.name,
-                variableDescription: variable.description,
-                collectorType: 'pmac-variables',
-              },
-            });
-            
-            logger.debug('Variable collected', {
-              type: variable.type,
-              address: variable.address,
-              value,
-              jobId: job.id,
-            });
+            return {
+              success: true,
+              dataPoint: {
+                timestamp: new Date(), // Более точная временная метка для каждой переменной
+                machineId,
+                variableType: variable.type,
+                variableAddress: variable.address,
+                value,
+                quality: 'good',
+                collectionJobId: job.id,
+                metadata: {
+                  variableName: variable.name,
+                  variableDescription: variable.description,
+                  collectorType: 'pmac-variables',
+                  readTimeMs: readTime,
+                },
+              } as DataPoint,
+              variable,
+            };
           } catch (error) {
-            logger.error('Failed to collect variable', {
-              type: variable.type,
-              address: variable.address,
-              error: error.message,
-              jobId: job.id,
-            });
+            return {
+              success: false,
+              error,
+              variable,
+              dataPoint: {
+                timestamp: new Date(),
+                machineId,
+                variableType: variable.type,
+                variableAddress: variable.address,
+                value: 0,
+                quality: 'bad',
+                collectionJobId: job.id,
+                metadata: {
+                  error: error.message,
+                  collectorType: 'pmac-variables',
+                },
+              } as DataPoint,
+            };
+          }
+        });
+
+        const batchResults = await Promise.allSettled(batchPromises);
+        
+        for (const result of batchResults) {
+          if (result.status === 'fulfilled') {
+            const { success, dataPoint, variable, error } = result.value;
+            dataPoints.push(dataPoint);
             
-            // Add error data point with bad quality
-            dataPoints.push({
-              timestamp,
-              machineId,
-              variableType: variable.type,
-              variableAddress: variable.address,
-              value: 0,
-              quality: 'bad',
-              collectionJobId: job.id,
-              metadata: {
+            if (!success) {
+              batchErrors++;
+              consecutiveErrors++;
+              logger.error('Failed to collect variable', {
+                type: variable.type,
+                address: variable.address,
                 error: error.message,
-                collectorType: 'pmac-variables',
-              },
-            });
+                jobId: job.id,
+              });
+            } else {
+              consecutiveErrors = 0; // Сбрасываем счетчик при успешном чтении
+              logger.debug('Variable collected', {
+                type: variable.type,
+                address: variable.address,
+                value: dataPoint.value,
+                readTimeMs: dataPoint.metadata.readTimeMs,
+                jobId: job.id,
+              });
+            }
+          } else {
+            batchErrors++;
+            consecutiveErrors++;
+            logger.error('Batch promise rejected:', result.reason);
           }
         }
         
-        // Small delay between batches
+        // Адаптивная логика размера batch
+        if (batchErrors > batch.length * 0.5) {
+          // Если более 50% переменных в batch не удалось прочитать, уменьшаем размер
+          batchSize = Math.max(1, Math.floor(batchSize * 0.7));
+          logger.warn('High error rate in batch, reducing batch size', { 
+            newBatchSize: batchSize,
+            batchErrors,
+            batchSize: batch.length 
+          });
+        } else if (batchErrors === 0 && batchSize < config.batchSize) {
+          // Если batch успешен и размер меньше настроенного, увеличиваем
+          batchSize = Math.min(config.batchSize, batchSize + 5);
+        }
+        
+        // Прерываем сбор, если слишком много последовательных ошибок
+        if (consecutiveErrors > 20) {
+          logger.error('Too many consecutive errors, stopping variable collection', {
+            consecutiveErrors,
+            jobId: job.id,
+          });
+          throw new Error(`Too many consecutive read errors: ${consecutiveErrors}`);
+        }
+        
+        // Динамическая задержка между batch в зависимости от ошибок
         if (i + batchSize < config.variables.length) {
-          await new Promise(resolve => setTimeout(resolve, 10));
+          const delay = batchErrors > 0 ? 50 + (batchErrors * 10) : 10;
+          await new Promise(resolve => setTimeout(resolve, delay));
         }
       }
 
+      const goodPoints = dataPoints.filter(dp => dp.quality === 'good').length;
+      const successRate = dataPoints.length > 0 ? (goodPoints / dataPoints.length) * 100 : 0;
+
       logger.info(`Collected ${dataPoints.length} variable data points`, { 
         jobId: job.id,
-        configId: config.id 
+        configId: config.id,
+        goodPoints,
+        successRate: `${successRate.toFixed(1)}%`,
       });
       
       return dataPoints;
@@ -415,19 +484,79 @@ export class PMACCollector {
   }
 
   private async readVariable(type: string, address: number): Promise<number> {
+    const startTime = Date.now();
+    
     try {
       const response = await this.httpClient.get('/api/variable', {
         params: { type, address },
+        timeout: 3000, // 3 секунды таймаут для одной переменной
       });
       
+      const readTime = Date.now() - startTime;
+      
       if (response.data && typeof response.data.value === 'number') {
-        return response.data.value;
+        // Проверяем разумность значения
+        const value = response.data.value;
+        
+        if (!isFinite(value)) {
+          throw new Error(`Invalid value: ${value} (not finite)`);
+        }
+        
+        // Логируем медленные чтения
+        if (readTime > 1000) {
+          logger.warn('Slow variable read detected', {
+            variable: `${type}${address}`,
+            readTimeMs: readTime,
+          });
+        }
+        
+        return value;
       } else {
-        throw new Error('Invalid response format');
+        throw new Error(`Invalid response format: ${JSON.stringify(response.data)}`);
       }
     } catch (error) {
-      logger.error(`Failed to read variable ${type}${address}:`, error);
-      throw error;
+      const readTime = Date.now() - startTime;
+      
+      // Классифицируем ошибки для лучшей обработки
+      let errorType = 'unknown';
+      let retryable = false;
+      
+      if (error.code === 'ECONNREFUSED') {
+        errorType = 'connection_refused';
+        retryable = true;
+      } else if (error.code === 'ENOTFOUND') {
+        errorType = 'host_not_found';
+        retryable = false;
+      } else if (error.code === 'ETIMEDOUT' || error.message.includes('timeout')) {
+        errorType = 'timeout';
+        retryable = true;
+      } else if (error.response?.status >= 500) {
+        errorType = 'server_error';
+        retryable = true;
+      } else if (error.response?.status === 404) {
+        errorType = 'variable_not_found';
+        retryable = false;
+      } else if (error.response?.status >= 400) {
+        errorType = 'client_error';
+        retryable = false;
+      }
+      
+      logger.error(`Failed to read variable ${type}${address}:`, {
+        error: error.message,
+        errorType,
+        retryable,
+        readTimeMs: readTime,
+        status: error.response?.status,
+      });
+      
+      // Обогащаем ошибку информацией для принятия решений выше
+      const enrichedError = new Error(error.message);
+      enrichedError['originalError'] = error;
+      enrichedError['errorType'] = errorType;
+      enrichedError['retryable'] = retryable;
+      enrichedError['readTimeMs'] = readTime;
+      
+      throw enrichedError;
     }
   }
 

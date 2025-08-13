@@ -2,7 +2,7 @@ import { Request, Response } from 'express';
 import { z } from 'zod';
 import { logger } from '../utils/logger.js';
 import { DatabaseService } from '../services/database.js';
-import { RedisService } from '../services/redis.js';
+// Redis удален - используется in-memory кеширование
 import { CollectionScheduler } from '../services/collection-scheduler.js';
 import { 
   CollectionConfigSchema,
@@ -26,7 +26,6 @@ const CreateConfigRequestSchema = CollectionConfigSchema.omit({ id: true });
 export class CollectionController {
   constructor(
     private database: DatabaseService,
-    private redis: RedisService,
     private scheduler: CollectionScheduler
   ) {}
 
@@ -39,7 +38,7 @@ export class CollectionController {
         uptime: process.uptime(),
         services: {
           database: this.database.isHealthy(),
-          redis: this.redis.isHealthy(),
+          redis: 'disabled (using in-memory)',
           scheduler: this.scheduler.getStats(),
         },
         version: process.env.npm_package_version || '1.0.0',
@@ -112,13 +111,16 @@ export class CollectionController {
         ...configData,
       };
 
+      // Save to database first
+      const savedConfig = await this.database.createCollectionConfig(config);
+      
       // Add to scheduler
-      await this.scheduler.addConfiguration(config);
+      await this.scheduler.addConfiguration(savedConfig);
 
       res.status(201).json({
         success: true,
         message: 'Configuration created successfully',
-        data: config,
+        data: savedConfig,
       });
 
       logger.info('Configuration created', { configId: config.id });
