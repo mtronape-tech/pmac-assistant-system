@@ -23,32 +23,60 @@
 
 - **Backend**: Node.js, TypeScript, Go, Python
 - **Frontend**: Next.js, TypeScript, ShadcnUI
-- **Databases**: PostgreSQL, TimescaleDB, Redis, Vector Database
+- **Databases**: SQLite, Redis (опционально), Vector Database (опционально)
 - **AI/ML**: OpenAI/Anthropic, Scikit-learn, TensorFlow
-- **Infrastructure**: Docker, Docker Compose
+- **Infrastructure**: Local development environment
 
 ## Быстрый старт
 
 ### Предварительные требования
 
-- Docker и Docker Compose
+- Python 3.11+
 - Node.js 18+
 - Git
 
 ### Установка и запуск
 
-1. Клонируйте репозиторий:
-```bash
-git clone <repository-url>
-cd RAG
-```
+1. **Клонируйте репозиторий:**
+   ```bash
+   git clone <repository-url>
+   cd RAG
+   ```
 
-2. Запустите систему в режиме разработки:
-```bash
-docker-compose -f docker-compose.dev.yml up
-```
+2. **Установите зависимости Python для аналитики:**
+   ```bash
+   cd services/analytics
+   pip install -r requirements.txt
+   ```
 
-3. Откройте веб-интерфейс: http://localhost:3000
+3. **Установите зависимости Node.js для MCP Server:**
+   ```bash
+   cd ../mcp-server
+   npm install
+   ```
+
+4. **Запустите сервис аналитики:**
+   ```bash
+   cd ../analytics
+   python simple_analytics_service.py
+   ```
+
+5. **В новом терминале запустите MCP Server:**
+   ```bash
+   cd services/mcp-server
+   node start-simple.js
+   ```
+
+6. **Откройте веб-интерфейсы:**
+   - **Аналитика:** http://localhost:3003/docs
+   - **MCP Server:** http://localhost:3001
+
+## Особенности новой архитектуры
+
+- ✅ **Без Docker** - все сервисы работают локально
+- ✅ **SQLite** - простая файловая база данных
+- ✅ **Быстрый запуск** - не нужно ждать запуска контейнеров
+- ✅ **Простая разработка** - работает на любой машине
 
 ## Документация
 

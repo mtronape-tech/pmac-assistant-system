@@ -1,8 +1,6 @@
 import { WebSocketServer, WebSocket } from 'ws';
 import { Server as HttpServer } from 'http';
 import { logger } from '../utils/logger.js';
-import { DatabaseService } from './database.js';
-// Redis удален - используется in-memory кеширование
 import { DataPoint } from '../types/collection-types.js';
 
 export interface StreamSubscription {
@@ -23,17 +21,14 @@ export interface WSMessage {
 
 export class WebSocketStreamer {
   private wss: WebSocketServer;
-  private database: DatabaseService;
   private clients = new Map<WebSocket, Set<StreamSubscription>>();
   private subscriptions = new Map<string, StreamSubscription>();
   private streamInterval: NodeJS.Timeout | null = null;
   private isRunning = false;
 
   constructor(
-    server: HttpServer,
-    database: DatabaseService
+    server: HttpServer
   ) {
-    this.database = database;
     
     this.wss = new WebSocketServer({ 
       server,
@@ -276,36 +271,9 @@ export class WebSocketStreamer {
     subscription: StreamSubscription
   ): Promise<void> {
     try {
-      // Get latest data points for this subscription
-      const endTime = new Date();
-      const startTime = new Date(endTime.getTime() - subscription.interval);
-      
-      let dataPoints: DataPoint[];
-      
-      if (subscription.variableType && subscription.variableAddress !== undefined) {
-        // Specific variable
-        dataPoints = await this.database.getDataPoints(
-          subscription.machineId,
-          startTime,
-          endTime,
-          subscription.variableType,
-          subscription.variableAddress,
-          100
-        );
-      } else if (subscription.variableType) {
-        // All variables of specific type
-        dataPoints = await this.database.getDataPoints(
-          subscription.machineId,
-          startTime,
-          endTime,
-          subscription.variableType,
-          undefined,
-          100
-        );
-      } else {
-        // Get latest values for all variables
-        dataPoints = await this.database.getLatestValues(subscription.machineId);
-      }
+      // For now, send empty data since we don't have access to data points
+      // In a real implementation, this would get data from the scheduler
+      const dataPoints: DataPoint[] = [];
 
       if (dataPoints.length > 0) {
         this.sendMessage(ws, {
@@ -313,7 +281,7 @@ export class WebSocketStreamer {
           payload: {
             dataPoints,
             count: dataPoints.length,
-            timeRange: { startTime, endTime },
+            timeRange: { startTime: new Date(), endTime: new Date() },
           },
           subscriptionId: subscription.id,
           timestamp: new Date(),

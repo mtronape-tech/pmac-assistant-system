@@ -1,64 +1,123 @@
-import { Pool, PoolClient } from "pg";
+import Database from "better-sqlite3";
 import { config } from "../config.js";
 import { logger } from "../utils/logger.js";
+import { join } from "path";
+import { fileURLToPath } from "url";
+
+const __dirname = fileURLToPath(new URL(".", import.meta.url));
 
 export class DatabaseService {
-  private pool: Pool | null = null;
+  private db: Database.Database | null = null;
+  private dbPath: string;
+
+  constructor() {
+    // Используем SQLite файл в корне проекта
+    this.dbPath = join(__dirname, "../../../analytics.db");
+  }
 
   async connect(): Promise<void> {
     try {
-      this.pool = new Pool({
-        connectionString: config.database.url,
-        ssl: config.database.ssl,
-        max: 20,
-        idleTimeoutMillis: 30000,
-        connectionTimeoutMillis: 2000,
-      });
+      this.db = new Database(this.dbPath);
+      
+      // Включаем WAL режим для лучшей производительности
+      this.db.pragma("journal_mode = WAL");
+      this.db.pragma("synchronous = NORMAL");
+      this.db.pragma("cache_size = 10000");
+      this.db.pragma("temp_store = MEMORY");
 
-      // Проверяем подключение
-      const client = await this.pool.connect();
-      await client.query("SELECT NOW()");
-      client.release();
+      // Создаем таблицы если их нет
+      await this.initTables();
 
-      logger.info("Подключение к PostgreSQL установлено");
+      logger.info("Подключение к SQLite установлено");
     } catch (error) {
-      logger.error("Ошибка подключения к PostgreSQL:", error);
+      logger.error("Ошибка подключения к SQLite:", error);
       throw error;
     }
   }
 
   async disconnect(): Promise<void> {
-    if (this.pool) {
-      await this.pool.end();
-      this.pool = null;
-      logger.info("Подключение к PostgreSQL закрыто");
+    if (this.db) {
+      this.db.close();
+      this.db = null;
+      logger.info("Подключение к SQLite закрыто");
     }
   }
 
-  async getClient(): Promise<PoolClient> {
-    if (!this.pool) {
-      throw new Error("База данных не подключена");
-    }
-    return this.pool.connect();
+  private async initTables(): Promise<void> {
+    if (!this.db) return;
+
+    // Создаем таблицу для PMAC данных
+    this.db.exec(`
+      CREATE TABLE IF NOT EXISTS pmac_data (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        timestamp TEXT NOT NULL,
+        machine_id TEXT NOT NULL,
+        variable_type TEXT,
+        variable_address INTEGER,
+        value REAL,
+        quality TEXT DEFAULT 'good',
+        collection_job_id TEXT
+      )
+    `);
+
+    // Создаем таблицу для конфигураций
+    this.db.exec(`
+      CREATE TABLE IF NOT EXISTS pmac_configs (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        machine_id TEXT NOT NULL,
+        config_type TEXT NOT NULL,
+        config_data TEXT NOT NULL,
+        created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+        updated_at TEXT DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+
+    // Создаем таблицу для заданий
+    this.db.exec(`
+      CREATE TABLE IF NOT EXISTS pmac_jobs (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        job_type TEXT NOT NULL,
+        status TEXT NOT NULL,
+        machine_id TEXT,
+        parameters TEXT,
+        result TEXT,
+        created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+        completed_at TEXT
+      )
+    `);
+
+    // Создаем индексы
+    this.db.exec(`
+      CREATE INDEX IF NOT EXISTS idx_pmac_data_machine_time 
+      ON pmac_data (machine_id, timestamp DESC)
+    `);
+
+    this.db.exec(`
+      CREATE INDEX IF NOT EXISTS idx_pmac_configs_machine 
+      ON pmac_configs (machine_id, config_type)
+    `);
+
+    logger.info("Таблицы SQLite инициализированы");
   }
 
-  async query(text: string, params?: any[]): Promise<any> {
-    if (!this.pool) {
+  async query(text: string, params: any[] = []): Promise<any> {
+    if (!this.db) {
       throw new Error("База данных не подключена");
     }
 
     const start = Date.now();
     try {
-      const result = await this.pool.query(text, params);
+      const stmt = this.db.prepare(text);
+      const result = stmt.all(params);
       const duration = Date.now() - start;
       
       logger.debug("Выполнен SQL запрос", {
         text,
         duration,
-        rows: result.rowCount,
+        rows: Array.isArray(result) ? result.length : 1,
       });
       
-      return result;
+      return { rows: result, rowCount: Array.isArray(result) ? result.length : 1 };
     } catch (error) {
       const duration = Date.now() - start;
       logger.error("Ошибка SQL запроса", {
@@ -70,22 +129,19 @@ export class DatabaseService {
     }
   }
 
-  async transaction<T>(callback: (client: PoolClient) => Promise<T>): Promise<T> {
-    if (!this.pool) {
+  async transaction<T>(callback: () => Promise<T>): Promise<T> {
+    if (!this.db) {
       throw new Error("База данных не подключена");
     }
 
-    const client = await this.pool.connect();
     try {
-      await client.query("BEGIN");
-      const result = await callback(client);
-      await client.query("COMMIT");
+      this.db.exec("BEGIN TRANSACTION");
+      const result = await callback();
+      this.db.exec("COMMIT");
       return result;
     } catch (error) {
-      await client.query("ROLLBACK");
+      this.db.exec("ROLLBACK");
       throw error;
-    } finally {
-      client.release();
     }
   }
 
@@ -98,139 +154,105 @@ export class DatabaseService {
     quality?: string;
   }): Promise<void> {
     const query = `
-      INSERT INTO pmac_data (time, machine_id, variable_type, variable_address, value, quality)
-      VALUES (NOW(), $1, $2, $3, $4, $5)
+      INSERT INTO pmac_data (timestamp, machine_id, variable_type, variable_address, value, quality)
+      VALUES (?, ?, ?, ?, ?, ?)
     `;
     
     await this.query(query, [
+      new Date().toISOString(),
       data.machineId,
       data.variableType,
       data.variableAddress,
       data.value,
-      data.quality || "good",
+      data.quality || 'good'
     ]);
   }
 
-  async getPMACData(
-    machineId: string,
-    variableType?: string,
-    variableAddress?: number,
-    startTime?: Date,
-    endTime?: Date,
-    limit: number = 1000
-  ): Promise<any[]> {
-    let query = `
-      SELECT time, machine_id, variable_type, variable_address, value, quality
-      FROM pmac_data
-      WHERE machine_id = $1
+  async getPMACData(machineId: string, limit: number = 100): Promise<any[]> {
+    const query = `
+      SELECT * FROM pmac_data 
+      WHERE machine_id = ? 
+      ORDER BY timestamp DESC 
+      LIMIT ?
     `;
     
-    const params: any[] = [machineId];
-    let paramIndex = 2;
-
-    if (variableType) {
-      query += ` AND variable_type = $${paramIndex}`;
-      params.push(variableType);
-      paramIndex++;
-    }
-
-    if (variableAddress !== undefined) {
-      query += ` AND variable_address = $${paramIndex}`;
-      params.push(variableAddress);
-      paramIndex++;
-    }
-
-    if (startTime) {
-      query += ` AND time >= $${paramIndex}`;
-      params.push(startTime);
-      paramIndex++;
-    }
-
-    if (endTime) {
-      query += ` AND time <= $${paramIndex}`;
-      params.push(endTime);
-      paramIndex++;
-    }
-
-    query += ` ORDER BY time DESC LIMIT $${paramIndex}`;
-    params.push(limit);
-
-    const result = await this.query(query, params);
+    const result = await this.query(query, [machineId, limit]);
     return result.rows;
   }
 
-  // Методы для работы с документами
-  async saveDocument(document: {
-    title: string;
-    content: string;
-    metadata: any;
-  }): Promise<string> {
+  async saveConfig(machineId: string, configType: string, configData: any): Promise<void> {
     const query = `
-      INSERT INTO documents (title, content, metadata)
-      VALUES ($1, $2, $3)
-      RETURNING id
+      INSERT OR REPLACE INTO pmac_configs (machine_id, config_type, config_data, updated_at)
+      VALUES (?, ?, ?, ?)
+    `;
+    
+    await this.query(query, [
+      machineId,
+      configType,
+      JSON.stringify(configData),
+      new Date().toISOString()
+    ]);
+  }
+
+  async getConfig(machineId: string, configType: string): Promise<any> {
+    const query = `
+      SELECT config_data FROM pmac_configs 
+      WHERE machine_id = ? AND config_type = ?
+    `;
+    
+    const result = await this.query(query, [machineId, configType]);
+    if (result.rows.length > 0) {
+      return JSON.parse(result.rows[0].config_data);
+    }
+    return null;
+  }
+
+  async createJob(jobType: string, machineId?: string, parameters?: any): Promise<number> {
+    const query = `
+      INSERT INTO pmac_jobs (job_type, status, machine_id, parameters)
+      VALUES (?, ?, ?, ?)
     `;
     
     const result = await this.query(query, [
-      document.title,
-      document.content,
-      JSON.stringify(document.metadata),
+      jobType,
+      'pending',
+      machineId || null,
+      parameters ? JSON.stringify(parameters) : null
     ]);
     
-    return result.rows[0].id;
+    // Возвращаем ID созданного задания
+    return result.rows[0]?.id || 0;
   }
 
-  async getDocument(documentId: string): Promise<any> {
+  async updateJobStatus(jobId: number, status: string, result?: any): Promise<void> {
     const query = `
-      SELECT id, title, content, metadata, created_at, updated_at
-      FROM documents
-      WHERE id = $1
+      UPDATE pmac_jobs 
+      SET status = ?, result = ?, completed_at = ?
+      WHERE id = ?
     `;
     
-    const result = await this.query(query, [documentId]);
-    return result.rows[0] || null;
-  }
-
-  async saveDocumentChunk(chunk: {
-    documentId: string;
-    content: string;
-    embeddings: number[];
-    pageNumber?: number;
-    section?: string;
-    startIndex: number;
-    endIndex: number;
-  }): Promise<string> {
-    const query = `
-      INSERT INTO document_chunks (document_id, content, embeddings, page_number, section, start_index, end_index)
-      VALUES ($1, $2, $3, $4, $5, $6, $7)
-      RETURNING id
-    `;
-    
-    const result = await this.query(query, [
-      chunk.documentId,
-      chunk.content,
-      chunk.embeddings,
-      chunk.pageNumber,
-      chunk.section,
-      chunk.startIndex,
-      chunk.endIndex,
+    await this.query(query, [
+      status,
+      result ? JSON.stringify(result) : null,
+      status === 'completed' ? new Date().toISOString() : null,
+      jobId
     ]);
-    
-    return result.rows[0].id;
   }
 
-  async searchDocuments(query: string, limit: number = 10): Promise<any[]> {
-    // Простой текстовый поиск (в будущем можно добавить векторный поиск)
-    const sqlQuery = `
-      SELECT d.id, d.title, d.metadata, dc.content, dc.page_number, dc.section
-      FROM documents d
-      JOIN document_chunks dc ON d.id = dc.document_id
-      WHERE d.content ILIKE $1 OR dc.content ILIKE $1
-      ORDER BY d.updated_at DESC
-      LIMIT $2
+  async getJobStatus(jobId: number): Promise<any> {
+    const query = `
+      SELECT * FROM pmac_jobs WHERE id = ?
     `;
     
-    const result = await this.query(sqlQuery, [`%${query}%`, limit]);
-    return result.rows;
+    const result = await this.query(query, [jobId]);
+    if (result.rows.length > 0) {
+      const job = result.rows[0];
+      return {
+        ...job,
+        parameters: job.parameters ? JSON.parse(job.parameters) : null,
+        result: job.result ? JSON.parse(job.result) : null
+      };
+    }
+    return null;
   }
 }

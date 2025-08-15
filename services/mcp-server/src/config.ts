@@ -6,20 +6,21 @@ export const config = {
   port: parseInt(process.env.PORT || "3001", 10),
   nodeEnv: process.env.NODE_ENV || "development",
   
-  // База данных
+  // База данных (SQLite)
   database: {
-    url: process.env.DATABASE_URL || "postgresql://pmac_user:pmac_password@localhost:5432/pmac_assistant",
-    ssl: process.env.NODE_ENV === "production" ? { rejectUnauthorized: false } : false,
+    path: process.env.DATABASE_PATH || "./analytics.db",
   },
   
-  // Redis
+  // Redis (опционально, можно заменить на in-memory кэш)
   redis: {
     url: process.env.REDIS_URL || "redis://localhost:6379",
+    enabled: process.env.REDIS_ENABLED !== 'false',
   },
   
-  // Weaviate
+  // Weaviate (векторная база данных)
   weaviate: {
     url: process.env.WEAVIATE_URL || "http://localhost:8080",
+    enabled: process.env.WEAVIATE_ENABLED !== 'false',
   },
   
   // PMAC

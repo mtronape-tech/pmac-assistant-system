@@ -1,8 +1,6 @@
 import { Request, Response } from 'express';
 import { z } from 'zod';
 import { logger } from '../utils/logger.js';
-import { DatabaseService } from '../services/database.js';
-// Redis удален - используется in-memory кеширование
 import { CollectionScheduler } from '../services/collection-scheduler.js';
 import { 
   CollectionConfigSchema,
@@ -25,7 +23,6 @@ const CreateConfigRequestSchema = CollectionConfigSchema.omit({ id: true });
 
 export class CollectionController {
   constructor(
-    private database: DatabaseService,
     private scheduler: CollectionScheduler
   ) {}
 
@@ -37,7 +34,7 @@ export class CollectionController {
         timestamp: new Date().toISOString(),
         uptime: process.uptime(),
         services: {
-          database: this.database.isHealthy(),
+          database: 'in-memory storage',
           redis: 'disabled (using in-memory)',
           scheduler: this.scheduler.getStats(),
         },
@@ -58,7 +55,7 @@ export class CollectionController {
   // Configuration Management
   getConfigurations = async (req: Request, res: Response): Promise<void> => {
     try {
-      const configs = await this.database.getCollectionConfigs();
+      const configs = this.scheduler.getConfigurations();
       res.json({
         success: true,
         data: configs,
@@ -77,7 +74,7 @@ export class CollectionController {
   getConfiguration = async (req: Request, res: Response): Promise<void> => {
     try {
       const { id } = req.params;
-      const config = await this.database.getCollectionConfig(id);
+      const config = this.scheduler.getConfiguration(id);
       
       if (!config) {
         res.status(404).json({
@@ -111,16 +108,13 @@ export class CollectionController {
         ...configData,
       };
 
-      // Save to database first
-      const savedConfig = await this.database.createCollectionConfig(config);
-      
-      // Add to scheduler
-      await this.scheduler.addConfiguration(savedConfig);
+      // Add to scheduler (in-memory storage)
+      await this.scheduler.addConfiguration(config);
 
       res.status(201).json({
         success: true,
         message: 'Configuration created successfully',
-        data: savedConfig,
+        data: config,
       });
 
       logger.info('Configuration created', { configId: config.id });
@@ -288,11 +282,12 @@ export class CollectionController {
   getJobs = async (req: Request, res: Response): Promise<void> => {
     try {
       const limit = parseInt(req.query.limit as string) || 100;
-      const jobs = await this.database.getCollectionJobs(limit);
+      // For now, return running jobs only - completed jobs are stored in scheduler
+      const jobs = this.scheduler.getRunningJobs();
       
       res.json({
         success: true,
-        data: jobs,
+        data: jobs.slice(0, limit),
         count: jobs.length,
       });
     } catch (error) {
@@ -329,14 +324,24 @@ export class CollectionController {
     try {
       const query = GetDataPointsQuerySchema.parse(req.query);
       
-      const dataPoints = await this.database.getDataPoints(
-        query.machineId,
-        new Date(query.startTime),
-        new Date(query.endTime),
-        query.variableType,
-        query.variableAddress,
-        query.limit
-      );
+      // Get all data points from in-memory storage
+      const allDataPoints = this.scheduler.getDataPoints();
+      
+      // Filter by query parameters
+      let dataPoints = allDataPoints.filter(dp => {
+        const dpTime = new Date(dp.timestamp);
+        const startTime = new Date(query.startTime);
+        const endTime = new Date(query.endTime);
+        
+        return dp.machineId === query.machineId &&
+               dpTime >= startTime &&
+               dpTime <= endTime &&
+               (!query.variableType || dp.variableType === query.variableType) &&
+               (!query.variableAddress || dp.variableAddress === query.variableAddress);
+      });
+
+      // Apply limit
+      dataPoints = dataPoints.slice(0, query.limit);
 
       res.json({
         success: true,
@@ -373,23 +378,18 @@ export class CollectionController {
   // Statistics
   getStats = async (req: Request, res: Response): Promise<void> => {
     try {
-      // Try to get cached stats first
-      let stats = await this.redis.getCachedStats();
+      // Generate fresh stats from in-memory storage
+      const schedulerStats = this.scheduler.getStats();
+      const dataPoints = this.scheduler.getDataPoints();
       
-      if (!stats) {
-        // Generate fresh stats
-        const dbStats = await this.database.getCollectionStats();
-        const schedulerStats = this.scheduler.getStats();
-        
-        stats = {
-          database: dbStats,
-          scheduler: schedulerStats,
-          timestamp: new Date(),
-        };
-        
-        // Cache for 1 minute
-        await this.redis.cacheStats(stats);
-      }
+      const stats = {
+        database: {
+          totalDataPoints: dataPoints.length,
+          storage: 'in-memory',
+        },
+        scheduler: schedulerStats,
+        timestamp: new Date(),
+      };
 
       res.json({
         success: true,
@@ -426,18 +426,18 @@ export class CollectionController {
   cleanupOldData = async (req: Request, res: Response): Promise<void> => {
     try {
       const retentionDays = parseInt(req.query.retentionDays as string) || 30;
-      const deletedRows = await this.database.cleanupOldData(retentionDays);
+      const deletedCount = this.scheduler['cleanupOldData'](retentionDays);
       
       res.json({
         success: true,
         message: 'Cleanup completed successfully',
         data: {
-          deletedRows,
+          deletedRows: deletedCount,
           retentionDays,
         },
       });
 
-      logger.info('Manual cleanup completed', { deletedRows, retentionDays });
+      logger.info('Manual cleanup completed', { deletedCount, retentionDays });
     } catch (error) {
       logger.error('Failed to cleanup old data:', error);
       res.status(500).json({

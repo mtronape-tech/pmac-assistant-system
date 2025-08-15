@@ -2,8 +2,6 @@ import { v4 as uuidv4 } from 'uuid';
 import cron from 'node-cron';
 import { appConfig } from '../config/index.js';
 import { logger } from '../utils/logger.js';
-import { DatabaseService } from './database.js';
-// Redis удален - используется in-memory кеширование
 import { PMACCollector } from '../collectors/pmac-collector.js';
 import {
   CollectionConfig,
@@ -23,12 +21,14 @@ export interface SchedulerStats {
 }
 
 export class CollectionScheduler {
-  private database: DatabaseService;
   private collector: PMACCollector;
   private isRunning = false;
   private scheduledJobs = new Map<string, NodeJS.Timeout>();
   private cronJobs = new Map<string, cron.ScheduledTask>();
   private runningJobs = new Map<string, CollectionJob>();
+  private configurations = new Map<string, CollectionConfig>();
+  private dataPoints = new Map<string, DataPoint[]>();
+  private completedJobs = new Map<string, CollectionJob>();
   private stats: SchedulerStats = {
     totalJobsScheduled: 0,
     activeJobs: 0,
@@ -38,11 +38,7 @@ export class CollectionScheduler {
     lastScheduledAt: null,
   };
 
-  constructor(
-    database: DatabaseService,
-    collector: PMACCollector
-  ) {
-    this.database = database;
+  constructor(collector: PMACCollector) {
     this.collector = collector;
   }
 
@@ -55,7 +51,7 @@ export class CollectionScheduler {
     logger.info('Starting collection scheduler');
     
     try {
-      // Load existing configurations
+      // Load existing configurations from in-memory storage
       await this.loadConfigurations();
       
       // Start cleanup job for old data
@@ -114,11 +110,8 @@ export class CollectionScheduler {
         return;
       }
 
-      // Save to database
-      await this.database.saveCollectionConfig(config);
-      
-      // Cache in Redis
-      // Config кеширование в памяти не требуется
+      // Save to in-memory storage
+      this.configurations.set(config.id, config);
 
       // Schedule the job
       await this.scheduleJob(config);
@@ -146,8 +139,8 @@ export class CollectionScheduler {
         this.cronJobs.delete(configId);
       }
 
-      // Remove from cache
-      // Config удаление из кеша в памяти не требуется
+      // Remove from in-memory storage
+      this.configurations.delete(configId);
       
       logger.info(`Configuration removed`, { configId });
     } catch (error) {
@@ -173,7 +166,7 @@ export class CollectionScheduler {
 
   async executeJobNow(configId: string): Promise<string> {
     try {
-      const config = await this.getConfiguration(configId);
+      const config = this.getConfiguration(configId);
       if (!config) {
         throw new Error(`Configuration not found: ${configId}`);
       }
@@ -201,15 +194,13 @@ export class CollectionScheduler {
         job.endTime = new Date();
         job.duration = job.endTime.getTime() - job.startTime.getTime();
         
-        await this.database.saveCollectionJob(job);
-        // Running job удаление из Redis не требуется - используется локальная Map
+        this.completedJobs.set(jobId, job);
         this.runningJobs.delete(jobId);
         
         logger.info(`Job force stopped`, { jobId });
       } else {
         // Graceful stop - just mark for stopping
         job.metadata.stopRequested = true;
-        // Running job сохранение в Redis не требуется - используется локальная Map
         
         logger.info(`Job stop requested`, { jobId });
       }
@@ -227,14 +218,28 @@ export class CollectionScheduler {
     return Array.from(this.runningJobs.values());
   }
 
+  getConfigurations(): CollectionConfig[] {
+    return Array.from(this.configurations.values());
+  }
+
+  getConfiguration(configId: string): CollectionConfig | null {
+    return this.configurations.get(configId) || null;
+  }
+
+  getDataPoints(configId?: string): DataPoint[] {
+    if (configId) {
+      return this.dataPoints.get(configId) || [];
+    }
+    return Array.from(this.dataPoints.values()).flat();
+  }
+
   private async loadConfigurations(): Promise<void> {
     try {
-      const configs = await this.database.getCollectionConfigs();
+      const configs = Array.from(this.configurations.values());
       
       for (const config of configs) {
         if (config.enabled) {
           await this.scheduleJob(config);
-          // Config кеширование в памяти не требуется
         }
       }
       
@@ -317,10 +322,6 @@ export class CollectionScheduler {
       job.status = CollectionJobStatus.RUNNING;
       job.lastHeartbeat = new Date();
       this.runningJobs.set(job.id, job);
-      
-      // Save to database and Redis
-      await this.database.saveCollectionJob(job);
-      // Running job сохранение в Redis не требуется - используется локальная Map
 
       logger.info(`Starting job execution`, { jobId: job.id, configId: config.id });
 
@@ -332,9 +333,10 @@ export class CollectionScheduler {
         job.status = CollectionJobStatus.CANCELLED;
         logger.info(`Job cancelled by request`, { jobId: job.id });
       } else {
-        // Save collected data
+        // Save collected data to in-memory storage
         if (dataPoints.length > 0) {
-          await this.database.saveDataPoints(dataPoints);
+          const existingData = this.dataPoints.get(config.id) || [];
+          this.dataPoints.set(config.id, [...existingData, ...dataPoints]);
         }
 
         // Mark job as successful
@@ -391,17 +393,9 @@ export class CollectionScheduler {
         this.stats.totalJobsScheduled;
 
       // Clean up
-      await this.database.saveCollectionJob(job);
-      // Running job удаление из Redis не требуется - используется локальная Map
+      this.completedJobs.set(job.id, job);
       this.runningJobs.delete(job.id);
     }
-  }
-
-  private async getConfiguration(configId: string): Promise<CollectionConfig | null> {
-    // Получаем конфигурацию прямо из базы данных (без кеширования Redis)
-    const config = await this.database.getCollectionConfig(configId);
-    
-    return config;
   }
 
   private intervalToCron(intervalMs: number): string {
@@ -430,12 +424,37 @@ export class CollectionScheduler {
     cron.schedule('0 2 * * *', async () => {
       try {
         logger.info('Starting daily cleanup job');
-        const deletedRows = await this.database.cleanupOldData(appConfig.collection.retentionDays);
-        logger.info(`Cleanup completed, deleted ${deletedRows} old records`);
+        const deletedCount = this.cleanupOldData(appConfig.collection.retentionDays);
+        logger.info(`Cleanup completed, deleted ${deletedCount} old records`);
       } catch (error) {
         logger.error('Cleanup job failed:', error);
       }
     });
+  }
+
+  private cleanupOldData(retentionDays: number): number {
+    const cutoffDate = new Date();
+    cutoffDate.setDate(cutoffDate.getDate() - retentionDays);
+    
+    let deletedCount = 0;
+    
+    // Clean up old data points
+    for (const [configId, dataPoints] of this.dataPoints) {
+      const filteredData = dataPoints.filter(dp => new Date(dp.timestamp) > cutoffDate);
+      const deleted = dataPoints.length - filteredData.length;
+      deletedCount += deleted;
+      this.dataPoints.set(configId, filteredData);
+    }
+    
+    // Clean up old completed jobs
+    for (const [jobId, job] of this.completedJobs) {
+      if (job.endTime && job.endTime < cutoffDate) {
+        this.completedJobs.delete(jobId);
+        deletedCount++;
+      }
+    }
+    
+    return deletedCount;
   }
 
   private startHeartbeatMonitoring(): void {
@@ -461,8 +480,7 @@ export class CollectionScheduler {
               job.endTime = new Date();
               job.duration = job.endTime.getTime() - job.startTime.getTime();
               
-              await this.database.saveCollectionJob(job);
-              // Running job удаление из Redis не требуется - используется локальная Map
+              this.completedJobs.set(job.id, job);
               this.runningJobs.delete(job.id);
             }
           }

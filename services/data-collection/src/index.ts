@@ -3,8 +3,6 @@ import cors from 'cors';
 import { createServer } from 'http';
 import { appConfig } from './config/index.js';
 import { logger } from './utils/logger.js';
-import { DatabaseService } from './services/database.js';
-// Redis удален - используется in-memory кеширование
 import { CollectionScheduler } from './services/collection-scheduler.js';
 import { PMACCollector } from './collectors/pmac-collector.js';
 import { CollectionController } from './controllers/collection-controller.js';
@@ -14,7 +12,6 @@ import { QualityMonitor } from './services/quality-monitor.js';
 class DataCollectionServer {
   private app: express.Application;
   private server: any;
-  private database: DatabaseService;
   private scheduler: CollectionScheduler;
   private collector: PMACCollector;
   private controller: CollectionController;
@@ -24,12 +21,11 @@ class DataCollectionServer {
   constructor() {
     this.app = express();
     this.server = createServer(this.app);
-    this.database = new DatabaseService();
     this.collector = new PMACCollector();
-    this.scheduler = new CollectionScheduler(this.database, this.collector);
-    this.controller = new CollectionController(this.database, this.scheduler);
-    this.wsStreamer = new WebSocketStreamer(this.server, this.database);
-    this.qualityMonitor = new QualityMonitor(this.database);
+    this.scheduler = new CollectionScheduler(this.collector);
+    this.controller = new CollectionController(this.scheduler);
+    this.wsStreamer = new WebSocketStreamer(this.server);
+    this.qualityMonitor = new QualityMonitor();
     
     this.setupMiddleware();
     this.setupRoutes();
@@ -247,11 +243,8 @@ class DataCollectionServer {
     try {
       logger.info('Starting Data Collection Service');
 
-      // Connect to services
-      logger.info('Connecting to database...');
-      await this.database.connect();
-
-      logger.info('Redis отключен - используется in-memory кеширование');
+      // Services are now in-memory only
+      logger.info('Using in-memory storage - no external database required');
 
       // Start scheduler if collection is enabled
       if (appConfig.collection.enabled) {
@@ -291,11 +284,6 @@ class DataCollectionServer {
               logger.info('Stopping collection scheduler...');
               await this.scheduler.stop();
             }
-
-            logger.info('Redis отключен - нечего отключать');
-
-            logger.info('Disconnecting from database...');
-            await this.database.disconnect();
 
             logger.info('Graceful shutdown completed');
             process.exit(0);

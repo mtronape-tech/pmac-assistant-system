@@ -223,11 +223,8 @@ async function main() {
       transports[transport.sessionId] = transport;
       logger.info(`Новая сессия создана: ${transport.sessionId}`);
 
-      // Подключаем сервер к транспорту
+      // Подключаем сервер к транспорту (это автоматически запускает транспорт)
       await server.connect(transport);
-      
-      // Запускаем SSE поток
-      await transport.start();
     });
 
     // Обработка POST запросов для клиент-серверной коммуникации

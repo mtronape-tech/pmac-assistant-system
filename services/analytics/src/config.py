@@ -3,7 +3,8 @@ Configuration settings for Analytics Module
 """
 
 import os
-from pydantic import BaseSettings, Field
+from pydantic import Field
+from pydantic_settings import BaseSettings
 from typing import Optional
 
 class Settings(BaseSettings):
@@ -15,13 +16,8 @@ class Settings(BaseSettings):
     debug: bool = Field(default=True, env="DEBUG")
     log_level: str = Field(default="INFO", env="LOG_LEVEL")
     
-    # Database settings
-    db_host: str = Field(default="localhost", env="DB_HOST")
-    db_port: int = Field(default=5432, env="DB_PORT")
-    db_name: str = Field(default="pmac_assistant", env="DB_NAME")
-    db_user: str = Field(default="postgres", env="DB_USER")
-    db_password: str = Field(default="3852", env="DB_PASSWORD")
-    db_ssl: bool = Field(default=False, env="DB_SSL")
+    # Database settings (SQLite)
+    db_path: str = Field(default="analytics.db", env="DB_PATH")
     
     # Analytics settings
     max_data_points: int = Field(default=10000, env="MAX_DATA_POINTS")
