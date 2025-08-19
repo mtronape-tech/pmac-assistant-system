@@ -96,6 +96,9 @@ temp/
 # Database
 *.db
 *.sqlite
+*.db-shm
+*.db-wal
+*.db-journal
 
 # PMAC specific
 pmac_data/
