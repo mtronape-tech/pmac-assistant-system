@@ -2,88 +2,161 @@
 
 Интеллектуальный помощник для наладчиков станков с ЧПУ на базе контроллера Turbo PMAC.
 
-## Описание
+## 🎯 Описание
 
-Система помощника наладчика станков с ЧПУ (PMAC Assistant System) представляет собой модульную веб-платформу, построенную на основе MCP (Model Context Protocol) сервера. Система обеспечивает интеллектуальное взаимодействие с контроллером PMAC через ИИ помощника, управление переменными, сбор и анализ данных, а также предоставление рекомендаций.
+Система помощника наладчика станков с ЧПУ (PMAC Assistant System) представляет собой модульную веб-платформу с микросервисной архитектурой. Система обеспечивает интеллектуальное взаимодействие с контроллером PMAC через ИИ помощника, управление переменными, сбор и анализ данных в реальном времени, а также предоставление рекомендаций.
 
-## Архитектура
+## 🏗️ Архитектура системы
 
-Система состоит из следующих основных модулей:
+Система состоит из 6 микросервисов:
 
-- **MCP Server Core** - Центральный компонент для управления ИИ моделями
-- **PMAC Control Module** - Управление контроллером PMAC и его переменными
-- **Knowledge Base Module** - Управление документацией и интеграция с ИИ
-- **Data Collection Module** - Сбор данных с контроллера PMAC в реальном времени
-- **Analytics Module** - Анализ данных и построение графиков
-- **Recommendation Module** - Генерация рекомендаций на основе ИИ и ML
-- **Web Frontend** - Пользовательский интерфейс системы
-- **API Gateway** - REST API и WebSocket сервер
+| Сервис | Порт | Технология | Описание |
+|--------|------|------------|----------|
+| 🌐 **Web Frontend** | 3000 | Next.js + TypeScript | Веб-интерфейс системы |
+| 🎛️ **PMAC Control** | 3001 | Node.js + TypeScript | Управление контроллером PMAC |
+| 📡 **Data Collection** | 3002 | Node.js + TypeScript | Сбор данных в реальном времени |
+| 📊 **Analytics** | 3003 | Python + FastAPI | Аналитика и визуализация |
+| 🤖 **MCP Server** | 3004 | Node.js + TypeScript | AI интеграция и инструменты |
+| 📚 **Knowledge Base** | 3005 | Node.js + TypeScript | База знаний с векторным поиском |
 
-## Технологический стек
+## 🛠️ Технологический стек
 
-- **Backend**: Node.js, TypeScript, Go, Python
-- **Frontend**: Next.js, TypeScript, ShadcnUI
-- **Databases**: SQLite, Redis (опционально), Vector Database (опционально)
-- **AI/ML**: OpenAI/Anthropic, Scikit-learn, TensorFlow
-- **Infrastructure**: Local development environment
+- **Backend**: Node.js 20+, TypeScript, Python 3.11+
+- **Frontend**: Next.js 14, React, TypeScript, ShadcnUI
+- **Databases**: SQLite, Weaviate (векторная БД)
+- **AI/ML**: OpenAI/OpenRouter, векторные эмбеддинги
+- **Инфраструктура**: Локальная разработка без Docker
 
-## Быстрый старт
+## 🚀 Быстрый старт
 
 ### Предварительные требования
 
-- Python 3.11+
-- Node.js 18+
-- Git
+- **Node.js 20+** (рекомендуется LTS версия)
+- **Python 3.11+** (для Analytics сервиса)
+- **Git** для клонирования репозитория
+- **PowerShell** (Windows) или **Bash** (Linux/macOS)
 
 ### Установка и запуск
 
 1. **Клонируйте репозиторий:**
    ```bash
-   git clone <repository-url>
-   cd RAG
+   git clone https://github.com/mtronape-tech/pmac-assistant-system.git
+   cd pmac-assistant-system
    ```
 
-2. **Установите зависимости Python для аналитики:**
+2. **Установите зависимости для всех сервисов:**
    ```bash
+   # Установка Node.js зависимостей
+   npm install
+   
+   # Установка Python зависимостей для Analytics
    cd services/analytics
    pip install -r requirements.txt
+   cd ../..
    ```
 
-3. **Установите зависимости Node.js для MCP Server:**
-   ```bash
-   cd ../mcp-server
-   npm install
+3. **Запустите все сервисы одной командой:**
+   ```powershell
+   # Windows PowerShell
+   .\start-all-services.ps1
+   
+   # Или через npm
+   npm run dev
    ```
 
-4. **Запустите сервис аналитики:**
-   ```bash
-   cd ../analytics
-   python simple_analytics_service.py
+4. **Проверьте статус сервисов:**
+   ```powershell
+   .\check-services-status.ps1
    ```
 
-5. **В новом терминале запустите MCP Server:**
-   ```bash
-   cd services/mcp-server
-   node start-simple.js
-   ```
+### 🌐 Доступные интерфейсы
 
-6. **Откройте веб-интерфейсы:**
-   - **Аналитика:** http://localhost:3003/docs
-   - **MCP Server:** http://localhost:3001
+После запуска будут доступны:
 
-## Особенности новой архитектуры
+- **🏠 Главная страница:** http://localhost:3000
+- **🎛️ PMAC Control:** http://localhost:3001
+- **📡 Data Collection:** http://localhost:3002  
+- **📊 Analytics API:** http://localhost:3003/docs
+- **🤖 MCP Server:** http://localhost:3004
+- **📚 Knowledge Base:** http://localhost:3005/api
+
+## ✨ Особенности архитектуры
 
 - ✅ **Без Docker** - все сервисы работают локально
-- ✅ **SQLite** - простая файловая база данных
-- ✅ **Быстрый запуск** - не нужно ждать запуска контейнеров
+- ✅ **SQLite** - простая файловая база данных 
+- ✅ **Быстрый запуск** - система готова за 30 секунд
 - ✅ **Простая разработка** - работает на любой машине
+- ✅ **AI-Ready** - интегрирован с OpenAI/OpenRouter
+- ✅ **Микросервисы** - каждый компонент независим
+- ✅ **Real-time** - WebSocket для данных в реальном времени
+- ✅ **Fallback режимы** - работает даже без внешних сервисов
 
-## Документация
+## 📖 Функциональность
 
-- [Техническое задание](./pmac-assistant-system/requirements.md)
-- [Дизайн системы](./pmac-assistant-system/design.md)
-- [План реализации](./pmac-assistant-system/tasks.md)
+### 🎛️ PMAC Control
+- Чтение/запись переменных P, Q, I, M, L
+- Выполнение команд контроллера
+- Мониторинг статуса системы и осей
+- Встроенный симулятор для разработки
 
-## Лицензия
+### 📡 Data Collection  
+- Автоматический сбор данных с контроллера
+- Настраиваемые интервалы сбора
+- WebSocket streaming в реальном времени
+- Мониторинг качества данных
 
-MIT License
+### 📊 Analytics
+- Визуализация данных (Plotly, Matplotlib)
+- Анализ трендов и аномалий
+- Автоматическая генерация отчетов
+- RESTful API с Swagger документацией
+
+### 🤖 MCP Server
+- AI интеграция через MCP Protocol
+- Умные инструменты для работы с PMAC
+- Генерация рекомендаций
+- Интеграция с базой знаний
+
+### 📚 Knowledge Base
+- Загрузка документации (PDF, DOC, TXT, HTML)
+- Векторный поиск с Weaviate
+- AI-ответы на вопросы
+- Автоматическая обработка документов
+
+### 🌐 Web Frontend
+- Современный интерфейс на Next.js
+- Адаптивный дизайн
+- Real-time обновления
+- Интуитивная навигация
+
+## 🔧 Управление системой
+
+```powershell
+# Запуск всех сервисов
+.\start-all-services.ps1
+
+# Проверка статуса
+.\check-services-status.ps1
+
+# Остановка всех сервисов  
+.\stop-all-services.ps1
+```
+
+## 📚 Документация
+
+- [📋 Управление сервисами](./SERVICES_README.md)
+- [📝 Техническое задание](./pmac-assistant-system/requirements.md)
+- [🏗️ Дизайн системы](./pmac-assistant-system/design.md)
+- [📋 План реализации](./pmac-assistant-system/tasks.md)
+- [✅ Результаты тестирования](./TESTING_SUMMARY.md)
+
+## 🤝 Участие в разработке
+
+1. Форкните репозиторий
+2. Создайте ветку для новой функции
+3. Внесите изменения и напишите тесты
+4. Отправьте Pull Request
+
+## 📄 Лицензия
+
+MIT License - см. файл [LICENSE](LICENSE)
