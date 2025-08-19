@@ -47,7 +47,7 @@ export interface KnowledgeBaseConfig {
 
 export const config: KnowledgeBaseConfig = {
   server: {
-    port: parseInt(process.env.KNOWLEDGE_BASE_PORT || '3002'),
+    port: parseInt(process.env.KNOWLEDGE_BASE_PORT || '3005'),
     host: process.env.KNOWLEDGE_BASE_HOST || '0.0.0.0',
   },
   weaviate: {

@@ -1,7 +1,7 @@
 import { Server as McpServer } from "@modelcontextprotocol/sdk/server/index.js";
 import { z } from "zod";
 import { DatabaseService } from "../services/database.js";
-import { RedisService } from "../services/redis.js";
+
 import { PMACSimulator } from "../services/pmac-simulator.js";
 import { logger } from "../utils/logger.js";
 import { config } from "../config.js";
@@ -9,8 +9,7 @@ import { CallToolRequestSchema, CallToolResultSchema } from "@modelcontextprotoc
 
 export async function setupPMACTools(
   server: McpServer,
-  database: DatabaseService,
-  redis: RedisService
+  database: DatabaseService
 ): Promise<void> {
   const pmacSimulator = new PMACSimulator();
 
@@ -50,11 +49,7 @@ export async function setupPMACTools(
         quality: "good",
       });
 
-      // Кэшируем результат
-      await redis.cachePMACData(`${machineId}:${variableType}:${address}`, {
-        value,
-        timestamp: new Date().toISOString(),
-      });
+      // Кэширование отключено (Redis удален)
 
       return {
         content: [
@@ -291,7 +286,7 @@ export async function setupPMACTools(
       const endTime = new Date();
       const startTime = new Date(endTime.getTime() - hours * 60 * 60 * 1000);
 
-      const data = await database.getPMACData(
+      const data = await database.getPMACDataAdvanced(
         machineId,
         variableType,
         address,

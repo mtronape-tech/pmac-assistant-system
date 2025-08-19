@@ -3,7 +3,7 @@ import dotenv from "dotenv";
 dotenv.config();
 
 export const config = {
-  port: parseInt(process.env.PORT || "3001", 10),
+  port: parseInt(process.env.PORT || "3004", 10),
   nodeEnv: process.env.NODE_ENV || "development",
   
   // База данных (SQLite)
@@ -11,11 +11,7 @@ export const config = {
     path: process.env.DATABASE_PATH || "./analytics.db",
   },
   
-  // Redis (опционально, можно заменить на in-memory кэш)
-  redis: {
-    url: process.env.REDIS_URL || "redis://localhost:6379",
-    enabled: process.env.REDIS_ENABLED !== 'false',
-  },
+
   
   // Weaviate (векторная база данных)
   weaviate: {

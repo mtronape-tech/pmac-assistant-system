@@ -1,13 +1,12 @@
 import { Server as McpServer } from "@modelcontextprotocol/sdk/server/index.js";
 import { z } from "zod";
 import { DatabaseService } from "../services/database.js";
-import { RedisService } from "../services/redis.js";
+
 import { logger } from "../utils/logger.js";
 
 export async function setupRecommendationTools(
   server: McpServer,
-  database: DatabaseService,
-  redis: RedisService
+  database: DatabaseService
 ): Promise<void> {
   // Схема для генерации рекомендаций
   const GenerateRecommendationsSchema = z.object({
@@ -31,7 +30,7 @@ export async function setupRecommendationTools(
       const endTime = new Date();
       const startTime = new Date(endTime.getTime() - hours * 60 * 60 * 1000);
 
-      const data = await database.getPMACData(
+      const data = await database.getPMACDataAdvanced(
         machineId,
         undefined,
         undefined,
@@ -138,7 +137,7 @@ export async function setupRecommendationTools(
       const endTime = new Date();
       const startTime = new Date(endTime.getTime() - hours * 60 * 60 * 1000);
 
-      const data = await database.getPMACData(
+      const data = await database.getPMACDataAdvanced(
         machineId,
         undefined,
         undefined,

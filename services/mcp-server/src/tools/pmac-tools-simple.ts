@@ -1,7 +1,7 @@
 import { Server as McpServer } from "@modelcontextprotocol/sdk/server/index.js";
 import { z } from "zod";
 import { DatabaseService } from "../services/database.js";
-import { RedisService } from "../services/redis.js";
+
 import { logger } from "../utils/logger.js";
 import { config } from "../config.js";
 
@@ -64,8 +64,7 @@ class SimplePMACClient {
 
 export async function setupPMACToolsSimple(
   server: McpServer,
-  database: DatabaseService,
-  redis: RedisService
+  database: DatabaseService
 ): Promise<void> {
   
   const pmacClient = new SimplePMACClient();

@@ -47,7 +47,7 @@ export class CollectionController {
       res.status(500).json({
         status: 'error',
         message: 'Health check failed',
-        error: error.message,
+        error: error instanceof Error ? error.message : String(error),
       });
     }
   };
@@ -66,7 +66,7 @@ export class CollectionController {
       res.status(500).json({
         success: false,
         message: 'Failed to get configurations',
-        error: error.message,
+        error: error instanceof Error ? error.message : String(error),
       });
     }
   };
@@ -93,7 +93,7 @@ export class CollectionController {
       res.status(500).json({
         success: false,
         message: 'Failed to get configuration',
-        error: error.message,
+        error: error instanceof Error ? error.message : String(error),
       });
     }
   };
@@ -132,7 +132,7 @@ export class CollectionController {
       res.status(500).json({
         success: false,
         message: 'Failed to create configuration',
-        error: error.message,
+        error: error instanceof Error ? error.message : String(error),
       });
     }
   };
@@ -171,7 +171,7 @@ export class CollectionController {
       res.status(500).json({
         success: false,
         message: 'Failed to update configuration',
-        error: error.message,
+        error: error instanceof Error ? error.message : String(error),
       });
     }
   };
@@ -194,7 +194,7 @@ export class CollectionController {
       res.status(500).json({
         success: false,
         message: 'Failed to delete configuration',
-        error: error.message,
+        error: error instanceof Error ? error.message : String(error),
       });
     }
   };
@@ -230,7 +230,7 @@ export class CollectionController {
       res.status(500).json({
         success: false,
         message: 'Failed to start collection',
-        error: error.message,
+        error: error instanceof Error ? error.message : String(error),
       });
     }
   };
@@ -274,7 +274,7 @@ export class CollectionController {
       res.status(500).json({
         success: false,
         message: 'Failed to stop collection',
-        error: error.message,
+        error: error instanceof Error ? error.message : String(error),
       });
     }
   };
@@ -295,7 +295,7 @@ export class CollectionController {
       res.status(500).json({
         success: false,
         message: 'Failed to get jobs',
-        error: error.message,
+        error: error instanceof Error ? error.message : String(error),
       });
     }
   };
@@ -314,7 +314,7 @@ export class CollectionController {
       res.status(500).json({
         success: false,
         message: 'Failed to get running jobs',
-        error: error.message,
+        error: error instanceof Error ? error.message : String(error),
       });
     }
   };
@@ -370,7 +370,7 @@ export class CollectionController {
       res.status(500).json({
         success: false,
         message: 'Failed to get data points',
-        error: error.message,
+        error: error instanceof Error ? error.message : String(error),
       });
     }
   };
@@ -400,7 +400,7 @@ export class CollectionController {
       res.status(500).json({
         success: false,
         message: 'Failed to get statistics',
-        error: error.message,
+        error: error instanceof Error ? error.message : String(error),
       });
     }
   };
@@ -418,7 +418,7 @@ export class CollectionController {
       res.status(500).json({
         success: false,
         message: 'Failed to get collection types',
-        error: error.message,
+        error: error instanceof Error ? error.message : String(error),
       });
     }
   };
@@ -443,7 +443,7 @@ export class CollectionController {
       res.status(500).json({
         success: false,
         message: 'Failed to cleanup old data',
-        error: error.message,
+        error: error instanceof Error ? error.message : String(error),
       });
     }
   };

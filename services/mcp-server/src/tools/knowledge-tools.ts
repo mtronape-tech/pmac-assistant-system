@@ -1,13 +1,12 @@
 import { Server as McpServer } from "@modelcontextprotocol/sdk/server/index.js";
 import { z } from "zod";
 import { DatabaseService } from "../services/database.js";
-import { RedisService } from "../services/redis.js";
+
 import { logger } from "../utils/logger.js";
 
 export async function setupKnowledgeBaseTools(
   server: McpServer,
-  database: DatabaseService,
-  redis: RedisService
+  database: DatabaseService
 ): Promise<void> {
   // Схема для поиска документов
   const SearchDocumentsSchema = z.object({
@@ -103,13 +102,7 @@ export async function setupKnowledgeBaseTools(
         metadata,
       });
 
-      // Кэшируем документ
-      await redis.cacheDocument(documentId, {
-        id: documentId,
-        title,
-        content,
-        metadata,
-      });
+      // Кэширование отключено (Redis удален)
 
       return {
         content: [

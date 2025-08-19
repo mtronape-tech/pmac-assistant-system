@@ -12,6 +12,9 @@ import type {
 export class WeaviateService {
   private client: WeaviateClient;
   private className: string;
+  private isAvailable = false;
+  private inMemoryDocuments = new Map<string, any>();
+  private inMemoryChunks = new Map<string, any>();
 
   constructor() {
     this.className = config.weaviate.className;
@@ -23,8 +26,14 @@ export class WeaviateService {
 
   async initialize(): Promise<void> {
     try {
-      // Проверяем подключение
-      const isReady = await this.client.misc.readyChecker().do();
+      // Проверяем подключение с таймаутом
+      const isReady = await Promise.race([
+        this.client.misc.readyChecker().do(),
+        new Promise((_, reject) => 
+          setTimeout(() => reject(new Error('Timeout connecting to Weaviate')), 5000)
+        )
+      ]);
+      
       if (!isReady) {
         throw new Error('Weaviate не готов к работе');
       }
@@ -36,9 +45,11 @@ export class WeaviateService {
       }
 
       logger.info('Weaviate сервис инициализирован успешно');
+      this.isAvailable = true;
     } catch (error) {
-      logger.error('Ошибка инициализации Weaviate:', error);
-      throw error;
+      logger.warn('Weaviate недоступен, переходим в режим in-memory:', error);
+      this.isAvailable = false;
+      // Не выбрасываем ошибку, позволяем сервису работать без Weaviate
     }
   }
 
@@ -151,6 +162,13 @@ export class WeaviateService {
   }
 
   async addDocument(document: Document): Promise<void> {
+    if (!this.isAvailable) {
+      // Режим in-memory
+      this.inMemoryDocuments.set(document.id, document);
+      logger.debug(`Документ ${document.id} добавлен в in-memory хранилище`);
+      return;
+    }
+
     try {
       const weaviateObject: WeaviateObject = {
         id: document.id,
@@ -222,6 +240,37 @@ export class WeaviateService {
   }
 
   async searchSimilar(queryEmbedding: number[], query: SearchQuery): Promise<SearchResult[]> {
+    if (!this.isAvailable) {
+      // Режим in-memory - простой поиск по тексту
+      const results: SearchResult[] = [];
+      const queryText = query.query.toLowerCase();
+      
+      for (const [docId, doc] of this.inMemoryDocuments.entries()) {
+        if (doc.content.toLowerCase().includes(queryText)) {
+          const document: Document = {
+            id: docId,
+            title: doc.title || '',
+            content: doc.content || '',
+            type: doc.type,
+            metadata: doc.metadata || {},
+            createdAt: doc.createdAt || new Date(),
+            updatedAt: doc.updatedAt || new Date(),
+          };
+
+          results.push({
+            document,
+            chunk: undefined,
+            score: 0.8,
+            highlights: this.extractHighlights(doc.content, query.query),
+            context: this.extractContext(doc.content, query.query),
+          });
+        }
+      }
+      
+      logger.debug(`Найдено ${results.length} результатов в in-memory хранилище`);
+      return results.slice(0, query.limit || 10);
+    }
+
     try {
       let weaviateQuery = this.client.graphql.get()
         .withClassName(this.className)
@@ -401,6 +450,21 @@ export class WeaviateService {
   }
 
   async deleteDocument(documentId: string): Promise<void> {
+    if (!this.isAvailable) {
+      // Режим in-memory
+      const deleted = this.inMemoryDocuments.delete(documentId);
+      if (deleted) {
+        // Удаляем связанные чанки
+        for (const [chunkId, chunk] of this.inMemoryChunks.entries()) {
+          if (chunk.documentId === documentId) {
+            this.inMemoryChunks.delete(chunkId);
+          }
+        }
+        logger.debug(`Документ ${documentId} удален из in-memory хранилища`);
+      }
+      return;
+    }
+
     try {
       // Удаляем документ и все его чанки
       await this.client.batch.objectsBatchDeleter()
@@ -420,6 +484,18 @@ export class WeaviateService {
   }
 
   async getStats(): Promise<any> {
+    if (!this.isAvailable) {
+      return {
+        totalDocuments: this.inMemoryDocuments.size,
+        totalChunks: this.inMemoryChunks.size,
+        storageType: 'in-memory',
+        uptime: process.uptime(),
+        weaviateUrl: 'not available',
+        className: this.className,
+        status: 'fallback mode',
+      };
+    }
+
     try {
       const result = await this.client.graphql.aggregate()
         .withClassName(this.className)
@@ -429,6 +505,8 @@ export class WeaviateService {
       return {
         totalObjects: result.data?.Aggregate?.[this.className]?.[0]?.meta?.count || 0,
         className: this.className,
+        storageType: 'weaviate',
+        status: 'active',
       };
     } catch (error) {
       logger.error('Ошибка получения статистики Weaviate:', error);
@@ -437,11 +515,16 @@ export class WeaviateService {
   }
 
   async healthCheck(): Promise<boolean> {
+    if (!this.isAvailable) {
+      return false; // Weaviate недоступен
+    }
+    
     try {
       const isReady = await this.client.misc.readyChecker().do();
       return isReady;
     } catch (error) {
       logger.error('Ошибка проверки здоровья Weaviate:', error);
+      this.isAvailable = false;
       return false;
     }
   }

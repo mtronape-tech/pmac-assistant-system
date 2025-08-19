@@ -11,7 +11,6 @@ import { setupKnowledgeBaseTools } from "./tools/knowledge-tools.js";
 import { setupAnalyticsTools } from "./tools/analytics-tools.js";
 import { setupRecommendationTools } from "./tools/recommendation-tools.js";
 import { DatabaseService } from "./services/database.js";
-import { RedisService } from "./services/redis.js";
 
 async function main() {
   try {
@@ -19,12 +18,10 @@ async function main() {
 
     // Инициализация сервисов
     const database = new DatabaseService();
-    const redis = new RedisService();
 
     await database.connect();
-    await redis.connect();
 
-    logger.info("База данных и Redis подключены");
+    logger.info("База данных подключена");
 
     // Создание MCP сервера
     const server = new McpServer({
@@ -35,15 +32,15 @@ async function main() {
     // Настройка инструментов
     // Используем новую версию PMAC Tools с PMAC Control Service
     if (config.pmacControl.enabled) {
-      await setupPMACToolsSimple(server, database, redis);
+      await setupPMACToolsSimple(server, database);
       logger.info("Используется PMAC Control Service для инструментов PMAC");
     } else {
-      await setupPMACTools(server, database, redis);
+      await setupPMACTools(server, database);
       logger.info("Используется встроенный симулятор PMAC");
     }
-    await setupKnowledgeBaseTools(server, database, redis);
-    await setupAnalyticsTools(server, database, redis);
-    await setupRecommendationTools(server, database, redis);
+    await setupKnowledgeBaseTools(server, database);
+    await setupAnalyticsTools(server, database);
+    await setupRecommendationTools(server, database);
 
     logger.info("Инструменты MCP настроены");
 
@@ -138,14 +135,12 @@ async function main() {
     process.on('SIGTERM', async () => {
       logger.info('Получен сигнал SIGTERM, завершение работы...');
       await database.disconnect();
-      await redis.disconnect();
       process.exit(0);
     });
 
     process.on('SIGINT', async () => {
       logger.info('Получен сигнал SIGINT, завершение работы...');
       await database.disconnect();
-      await redis.disconnect();
       process.exit(0);
     });
 

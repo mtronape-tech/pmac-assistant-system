@@ -5,12 +5,12 @@ config();
 
 const ConfigSchema = z.object({
   // Server
-  port: z.coerce.number().default(3008),
+  port: z.coerce.number().default(3002),
   host: z.string().default('0.0.0.0'),
   
   // PMAC Control Service
   pmacControl: z.object({
-    baseUrl: z.string().default('http://localhost:3007'),
+    baseUrl: z.string().default('http://localhost:3001'),
     enabled: z.boolean().default(true),
     timeout: z.coerce.number().default(5000),
   }),

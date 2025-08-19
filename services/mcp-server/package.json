@@ -19,7 +19,7 @@
     "@pmac/shared-types": "file:../../packages/shared-types",
     "express": "^4.18.0",
     "cors": "^2.8.5",
-    "redis": "^4.6.0",
+
     "better-sqlite3": "^9.4.0",
     "zod": "^3.22.0",
     "dotenv": "^16.3.0",

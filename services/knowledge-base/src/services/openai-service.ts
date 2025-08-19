@@ -9,53 +9,70 @@ import type {
 } from '../types/knowledge-types.js';
 
 export class AIService {
-  private client: OpenAI;
+  private client: OpenAI | null = null;
   private provider: 'openai' | 'openrouter';
-  private model: string;
-  private embeddingModel: string;
-  private maxTokens: number;
+  private model: string = '';
+  private embeddingModel: string = '';
+  private maxTokens: number = 4000;
 
   constructor() {
     this.provider = config.ai.provider;
     
-    if (this.provider === 'openrouter') {
-      if (!config.ai.openrouter.apiKey) {
-        throw new Error('OpenRouter API ключ не настроен');
+    try {
+      if (this.provider === 'openrouter') {
+        if (!config.ai.openrouter.apiKey) {
+          logger.warn('OpenRouter API ключ не настроен, AI функции будут отключены');
+          this.client = null as any;
+        } else {
+          this.client = new OpenAI({
+            apiKey: config.ai.openrouter.apiKey,
+            baseURL: config.ai.openrouter.baseUrl,
+            defaultHeaders: {
+              'HTTP-Referer': 'http://localhost:3005',
+              'X-Title': 'PMAC Assistant Knowledge Base',
+            },
+          });
+          
+          this.model = config.ai.openrouter.model;
+          this.embeddingModel = config.ai.openrouter.embeddingModel;
+          this.maxTokens = config.ai.openrouter.maxTokens;
+          
+          logger.info(`Инициализирован AIService с провайдером OpenRouter, модель: ${this.model}`);
+        }
+      } else {
+        if (!config.ai.openai.apiKey) {
+          logger.warn('OpenAI API ключ не настроен, AI функции будут отключены');
+          this.client = null as any;
+        } else {
+          this.client = new OpenAI({
+            apiKey: config.ai.openai.apiKey,
+          });
+          
+          this.model = config.ai.openai.model;
+          this.embeddingModel = config.ai.openai.embeddingModel;
+          this.maxTokens = config.ai.openai.maxTokens;
+          
+          logger.info(`Инициализирован AIService с провайдером OpenAI, модель: ${this.model}`);
+        }
       }
-      
-      this.client = new OpenAI({
-        apiKey: config.ai.openrouter.apiKey,
-        baseURL: config.ai.openrouter.baseUrl,
-        defaultHeaders: {
-          'HTTP-Referer': 'http://localhost:3002', // Для OpenRouter
-          'X-Title': 'PMAC Assistant Knowledge Base',
-        },
-      });
-      
-      this.model = config.ai.openrouter.model;
-      this.embeddingModel = config.ai.openrouter.embeddingModel;
-      this.maxTokens = config.ai.openrouter.maxTokens;
-      
-      logger.info(`Инициализирован AIService с провайдером OpenRouter, модель: ${this.model}`);
-    } else {
-      if (!config.ai.openai.apiKey) {
-        throw new Error('OpenAI API ключ не настроен');
-      }
-      
-      this.client = new OpenAI({
-        apiKey: config.ai.openai.apiKey,
-      });
-      
-      this.model = config.ai.openai.model;
-      this.embeddingModel = config.ai.openai.embeddingModel;
-      this.maxTokens = config.ai.openai.maxTokens;
-      
-      logger.info(`Инициализирован AIService с провайдером OpenAI, модель: ${this.model}`);
+    } catch (error) {
+      logger.warn('Ошибка инициализации AI сервиса, AI функции будут отключены:', error);
+      this.client = null as any;
     }
   }
 
   async generateEmbedding(request: EmbeddingRequest): Promise<EmbeddingResponse> {
     try {
+      if (!this.client) {
+        logger.warn('AI клиент не инициализирован, возвращаем пустой эмбеддинг');
+        // Возвращаем пустой эмбеддинг для совместимости
+        return {
+          embedding: new Array(1536).fill(0), // OpenAI embedding-3-small размер
+          tokensUsed: 0,
+          model: request.model || this.embeddingModel,
+        };
+      }
+
       const response = await this.client.embeddings.create({
         model: request.model || this.embeddingModel,
         input: request.text,
@@ -73,12 +90,26 @@ export class AIService {
       };
     } catch (error) {
       logger.error('Ошибка генерации эмбеддинга:', error);
-      throw error;
+      // Возвращаем пустой эмбеддинг при ошибке
+      return {
+        embedding: new Array(1536).fill(0),
+        tokensUsed: 0,
+        model: request.model || this.embeddingModel,
+      };
     }
   }
 
   async generateBatchEmbeddings(texts: string[]): Promise<EmbeddingResponse[]> {
     try {
+      if (!this.client) {
+        logger.warn('AI клиент не инициализирован, возвращаем пустые эмбеддинги');
+        return texts.map(() => ({
+          embedding: new Array(1536).fill(0),
+          tokensUsed: 0,
+          model: this.embeddingModel,
+        }));
+      }
+      
       const batchSize = 100; // OpenAI ограничение
       const results: EmbeddingResponse[] = [];
 
@@ -103,12 +134,28 @@ export class AIService {
       return results;
     } catch (error) {
       logger.error('Ошибка генерации пакетных эмбеддингов:', error);
-      throw error;
+      // Возвращаем пустые эмбеддинги при ошибке
+      return texts.map(() => ({
+        embedding: new Array(1536).fill(0),
+        tokensUsed: 0,
+        model: this.embeddingModel,
+      }));
     }
   }
 
   async generateAIResponse(query: string, searchResults: SearchResult[]): Promise<AIResponse> {
     try {
+      if (!this.client) {
+        logger.warn('AI клиент не инициализирован, возвращаем базовый ответ');
+        return {
+          answer: `Извините, AI сервис временно недоступен. Ваш вопрос: "${query}". Пожалуйста, попробуйте позже.`,
+          sources: searchResults,
+          confidence: 0.1,
+          reasoning: 'AI сервис не инициализирован',
+          followUpQuestions: [],
+        };
+      }
+      
       // Подготавливаем контекст из результатов поиска
       const context = this.prepareContext(searchResults);
       
@@ -218,6 +265,15 @@ ${context}`;
 предложите 3 кратких связанных вопроса, которые пользователь может захотеть задать далее. 
 Вопросы должны быть конкретными и касаться PMAC систем. Отвечайте только вопросами, по одному на строке.`;
 
+      if (!this.client) {
+        logger.warn('AI клиент не инициализирован, возвращаем базовые вопросы');
+        return [
+          'Как настроить PMAC контроллер?',
+          'Какие переменные наиболее важны для настройки?',
+          'Как выполнить процедуру homing?'
+        ];
+      }
+      
       const response = await this.client.chat.completions.create({
         model: this.model,
         max_tokens: 200,
@@ -242,6 +298,11 @@ ${context}`;
 
   async summarizeDocument(content: string, title: string): Promise<string> {
     try {
+      if (!this.client) {
+        logger.warn('AI клиент не инициализирован, возвращаем базовое резюме');
+        return `Документ "${title}" содержит информацию о PMAC системах. AI сервис временно недоступен для создания подробного резюме.`;
+      }
+      
       const prompt = `Создайте краткое резюме следующего технического документа о PMAC системах.
 Резюме должно быть информативным и содержать ключевые моменты.
 
@@ -264,12 +325,17 @@ ${content.substring(0, 8000)}${content.length > 8000 ? '...' : ''}
       return response.choices[0]?.message?.content || 'Не удалось создать резюме документа.';
     } catch (error) {
       logger.error('Ошибка создания резюме документа:', error);
-      throw error;
+      return `Документ "${title}" содержит информацию о PMAC системах. Ошибка AI сервиса: ${error instanceof Error ? error.message : 'Неизвестная ошибка'}`;
     }
   }
 
   async extractKeywords(content: string): Promise<string[]> {
     try {
+      if (!this.client) {
+        logger.warn('AI клиент не инициализирован, возвращаем базовые ключевые слова');
+        return ['pmac', 'контроллер', 'настройка', 'система', 'движение', 'ось', 'энкодер', 'двигатель'];
+      }
+      
       const prompt = `Извлеките 10-15 ключевых слов и фраз из следующего технического текста о PMAC системах.
 Возвращайте только ключевые слова, разделенные запятыми.
 
@@ -296,12 +362,17 @@ ${content.substring(0, 4000)}${content.length > 4000 ? '...' : ''}
       return keywords;
     } catch (error) {
       logger.warn('Не удалось извлечь ключевые слова:', error);
-      return [];
+      return ['pmac', 'контроллер', 'настройка', 'система', 'движение', 'ось', 'энкодер', 'двигатель'];
     }
   }
 
   async healthCheck(): Promise<boolean> {
     try {
+      if (!this.client) {
+        logger.warn('AI клиент не инициализирован');
+        return false;
+      }
+      
       const response = await this.client.chat.completions.create({
         model: this.model,
         max_tokens: 10,

@@ -180,6 +180,47 @@ export class DatabaseService {
     return result.rows;
   }
 
+  async getPMACDataAdvanced(
+    machineId: string, 
+    variableType?: string, 
+    address?: number, 
+    startTime?: Date, 
+    endTime?: Date, 
+    limit: number = 100
+  ): Promise<any[]> {
+    let query = `
+      SELECT * FROM pmac_data 
+      WHERE machine_id = ?
+    `;
+    const params: any[] = [machineId];
+
+    if (variableType) {
+      query += ` AND variable_type = ?`;
+      params.push(variableType);
+    }
+
+    if (address !== undefined) {
+      query += ` AND variable_address = ?`;
+      params.push(address);
+    }
+
+    if (startTime) {
+      query += ` AND timestamp >= ?`;
+      params.push(startTime.toISOString());
+    }
+
+    if (endTime) {
+      query += ` AND timestamp <= ?`;
+      params.push(endTime.toISOString());
+    }
+
+    query += ` ORDER BY timestamp DESC LIMIT ?`;
+    params.push(limit);
+
+    const result = await this.query(query, params);
+    return result.rows;
+  }
+
   async saveConfig(machineId: string, configType: string, configData: any): Promise<void> {
     const query = `
       INSERT OR REPLACE INTO pmac_configs (machine_id, config_type, config_data, updated_at)
@@ -254,5 +295,41 @@ export class DatabaseService {
       };
     }
     return null;
+  }
+
+  // Методы для работы с документами
+  async searchDocuments(query: string, limit: number = 10): Promise<any[]> {
+    const searchQuery = `
+      SELECT * FROM pmac_data 
+      WHERE variable_type LIKE ? OR machine_id LIKE ?
+      ORDER BY timestamp DESC 
+      LIMIT ?
+    `;
+    
+    const searchTerm = `%${query}%`;
+    const result = await this.query(searchQuery, [searchTerm, searchTerm, limit]);
+    return result.rows;
+  }
+
+  async saveDocument(document: {
+    title: string;
+    content: string;
+    metadata: any;
+  }): Promise<number> {
+    const query = `
+      INSERT INTO pmac_data (timestamp, machine_id, variable_type, variable_address, value, quality)
+      VALUES (?, ?, ?, ?, ?, ?)
+    `;
+    
+    const result = await this.query(query, [
+      new Date().toISOString(),
+      document.metadata.type || 'document',
+      document.title,
+      0, // address
+      document.content.length, // value как длина контента
+      'good'
+    ]);
+    
+    return result.rows[0]?.id || 0;
   }
 }

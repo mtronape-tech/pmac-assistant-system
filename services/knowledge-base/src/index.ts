@@ -65,17 +65,24 @@ async function startServer() {
     // Инициализируем сервисы
     logger.info('Инициализация Weaviate...');
     const weaviateService = new WeaviateService();
-    await weaviateService.initialize();
-
+    
     logger.info('Инициализация AI сервиса...');
     const aiService = new AIService();
     
     // Проверяем подключения
-    const weaviateHealthy = await weaviateService.healthCheck();
+    let weaviateHealthy = false;
+    try {
+      await weaviateService.initialize();
+      weaviateHealthy = await weaviateService.healthCheck();
+    } catch (error) {
+      logger.warn('⚠️  Weaviate недоступен, переходим в режим in-memory:', error);
+      weaviateHealthy = false;
+    }
+    
     const aiHealthy = await aiService.healthCheck();
     
     if (!weaviateHealthy) {
-      logger.warn('⚠️  Weaviate недоступен, некоторые функции могут не работать');
+      logger.warn('⚠️  Weaviate недоступен, используем in-memory хранилище');
     }
     
     if (!aiHealthy) {

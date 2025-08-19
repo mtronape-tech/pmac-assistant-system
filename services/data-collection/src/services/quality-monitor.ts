@@ -223,12 +223,12 @@ export class QualityMonitor {
 
     this.alerts.set(existingAlertKey, alert);
 
-    // Сохраняем алерт в Redis
-    await this.redis.set(
-      `quality_alert:${alert.id}`,
-      JSON.stringify(alert),
-      { EX: 3600 } // TTL 1 час
-    );
+    // Сохраняем алерт в памяти (Redis удален)
+    // await this.redis.set(
+    //   `quality_alert:${alert.id}`,
+    //   JSON.stringify(alert),
+    //   { EX: 3600 } // TTL 1 час
+    // );
 
     // Логируем алерт
     logger.warn('Quality alert created', {
@@ -327,7 +327,7 @@ export class QualityMonitor {
   getStats(): {
     isRunning: boolean;
     activeAlerts: number;
-    qualityThresholds: typeof this.qualityThresholds;
+    qualityThresholds: typeof QualityMonitor.prototype.qualityThresholds;
   } {
     return {
       isRunning: this.isRunning,

@@ -9,6 +9,14 @@ import {
   CollectionJobType 
 } from '../types/collection-types.js';
 
+// Интерфейс для расширенной ошибки
+interface EnrichedError extends Error {
+  originalError?: unknown;
+  errorType?: string;
+  retryable?: boolean;
+  readTimeMs?: number;
+}
+
 export interface PMACVariable {
   type: 'P' | 'Q' | 'I' | 'M' | 'L';
   address: number;
@@ -197,7 +205,7 @@ export class PMACCollector {
                 quality: 'bad',
                 collectionJobId: job.id,
                 metadata: {
-                  error: error.message,
+                  error: error instanceof Error ? error.message : String(error),
                   collectorType: 'pmac-variables',
                 },
               } as DataPoint,
@@ -218,7 +226,7 @@ export class PMACCollector {
               logger.error('Failed to collect variable', {
                 type: variable.type,
                 address: variable.address,
-                error: error.message,
+                error: error instanceof Error ? error.message : String(error),
                 jobId: job.id,
               });
             } else {
@@ -465,7 +473,7 @@ export class PMACCollector {
           logger.error('Failed to collect diagnostic variable', {
             type: variable.type,
             address: variable.address,
-            error: error.message,
+            error: error instanceof Error ? error.message : String(error),
             jobId: job.id,
           });
         }
@@ -521,40 +529,41 @@ export class PMACCollector {
       let errorType = 'unknown';
       let retryable = false;
       
-      if (error.code === 'ECONNREFUSED') {
+      if (error && typeof error === 'object' && 'code' in error && error.code === 'ECONNREFUSED') {
         errorType = 'connection_refused';
         retryable = true;
-      } else if (error.code === 'ENOTFOUND') {
+      } else if (error && typeof error === 'object' && 'code' in error && error.code === 'ENOTFOUND') {
         errorType = 'host_not_found';
         retryable = false;
-      } else if (error.code === 'ETIMEDOUT' || error.message.includes('timeout')) {
+      } else if ((error && typeof error === 'object' && 'code' in error && error.code === 'ETIMEDOUT') || 
+                 (error && typeof error === 'object' && 'message' in error && typeof error.message === 'string' && error.message.includes('timeout'))) {
         errorType = 'timeout';
         retryable = true;
-      } else if (error.response?.status >= 500) {
+      } else if (error && typeof error === 'object' && 'response' in error && error.response && typeof error.response === 'object' && 'status' in error.response && Number(error.response.status) >= 500) {
         errorType = 'server_error';
         retryable = true;
-      } else if (error.response?.status === 404) {
+      } else if (error && typeof error === 'object' && 'response' in error && error.response && typeof error.response === 'object' && 'status' in error.response && Number(error.response.status) === 404) {
         errorType = 'variable_not_found';
         retryable = false;
-      } else if (error.response?.status >= 400) {
+      } else if (error && typeof error === 'object' && 'response' in error && error.response && typeof error.response === 'object' && 'status' in error.response && Number(error.response.status) >= 400) {
         errorType = 'client_error';
         retryable = false;
       }
       
       logger.error(`Failed to read variable ${type}${address}:`, {
-        error: error.message,
+        error: error instanceof Error ? error.message : String(error),
         errorType,
         retryable,
         readTimeMs: readTime,
-        status: error.response?.status,
+        status: error && typeof error === 'object' && 'response' in error && error.response && typeof error.response === 'object' && 'status' in error.response ? error.response.status : undefined,
       });
       
       // Обогащаем ошибку информацией для принятия решений выше
-      const enrichedError = new Error(error.message);
-      enrichedError['originalError'] = error;
-      enrichedError['errorType'] = errorType;
-      enrichedError['retryable'] = retryable;
-      enrichedError['readTimeMs'] = readTime;
+      const enrichedError = new Error(error instanceof Error ? error.message : String(error)) as EnrichedError;
+      enrichedError.originalError = error;
+      enrichedError.errorType = errorType;
+      enrichedError.retryable = retryable;
+      enrichedError.readTimeMs = readTime;
       
       throw enrichedError;
     }
@@ -617,7 +626,7 @@ export class PMACCollector {
       logger.error('Collection failed', {
         jobId: job.id,
         configId: config.id,
-        error: error.message,
+        error: error instanceof Error ? error.message : String(error),
       });
       throw error;
     }

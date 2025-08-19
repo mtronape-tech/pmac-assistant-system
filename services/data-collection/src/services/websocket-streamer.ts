@@ -290,7 +290,7 @@ export class WebSocketStreamer {
     } catch (error) {
       logger.error('Failed to send data for subscription:', {
         subscriptionId: subscription.id,
-        error: error.message,
+        error: error instanceof Error ? error.message : String(error),
       });
       
       this.sendError(ws, 'Failed to fetch data', subscription.id);

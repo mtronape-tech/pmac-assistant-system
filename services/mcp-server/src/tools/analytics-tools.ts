@@ -1,13 +1,12 @@
 import { Server as McpServer } from "@modelcontextprotocol/sdk/server/index.js";
 import { z } from "zod";
 import { DatabaseService } from "../services/database.js";
-import { RedisService } from "../services/redis.js";
+
 import { logger } from "../utils/logger.js";
 
 export async function setupAnalyticsTools(
   server: McpServer,
-  database: DatabaseService,
-  redis: RedisService
+  database: DatabaseService
 ): Promise<void> {
   // Схема для анализа трендов
   const AnalyzeTrendsSchema = z.object({
@@ -31,7 +30,7 @@ export async function setupAnalyticsTools(
       const endTime = new Date();
       const startTime = new Date(endTime.getTime() - hours * 60 * 60 * 1000);
 
-      const data = await database.getPMACData(
+      const data = await database.getPMACDataAdvanced(
         machineId,
         variableType,
         address,
@@ -126,7 +125,7 @@ export async function setupAnalyticsTools(
       const endTime = new Date();
       const startTime = new Date(endTime.getTime() - hours * 60 * 60 * 1000);
 
-      const data = await database.getPMACData(
+      const data = await database.getPMACDataAdvanced(
         machineId,
         variableType,
         address,
@@ -221,7 +220,7 @@ export async function setupAnalyticsTools(
       const endTime = new Date();
       const startTime = new Date(endTime.getTime() - hours * 60 * 60 * 1000);
 
-      const data = await database.getPMACData(
+      const data = await database.getPMACDataAdvanced(
         machineId,
         variableType,
         address,

@@ -100,7 +100,7 @@ class DataCollectionServer {
         res.status(500).json({
           success: false,
           message: 'Failed to get quality metrics',
-          error: error.message,
+          error: error instanceof Error ? error.message : String(error),
         });
       }
     });
@@ -116,7 +116,7 @@ class DataCollectionServer {
         res.status(500).json({
           success: false,
           message: 'Failed to get alerts',
-          error: error.message,
+          error: error instanceof Error ? error.message : String(error),
         });
       }
     });
@@ -132,7 +132,7 @@ class DataCollectionServer {
         res.status(500).json({
           success: false,
           message: 'Failed to acknowledge alert',
-          error: error.message,
+          error: error instanceof Error ? error.message : String(error),
         });
       }
     });
