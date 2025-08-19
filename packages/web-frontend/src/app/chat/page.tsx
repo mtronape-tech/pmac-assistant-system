@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useRef, useEffect } from "react";
-import { Send, Bot, User, Loader2, Settings, Zap } from "lucide-react";
+import { Send, Bot, User, Loader2, Settings, Zap, FileText, HelpCircle, TrendingUp } from "lucide-react";
 import Link from "next/link";
 
 interface Message {
@@ -9,6 +9,9 @@ interface Message {
   role: "user" | "assistant";
   content: string;
   timestamp: Date;
+  sources?: any[];
+  confidence?: number;
+  followUpQuestions?: string[];
 }
 
 export default function ChatPage() {
@@ -16,8 +19,14 @@ export default function ChatPage() {
     {
       id: "1",
       role: "assistant",
-      content: "Привет! Я AI помощник для работы с PMAC контроллером. Могу помочь с настройкой переменных, анализом данных и решением проблем. Чем могу помочь?",
-      timestamp: new Date()
+      content: "Привет! Я AI помощник для работы с PMAC контроллером. Интегрирован с базой знаний и инструментами управления.\n\n✨ Возможности:\n• Ответы на технические вопросы\n• Анализ данных контроллера\n• Помощь с настройкой переменных\n• Поиск в документации\n• Диагностика проблем\n\nЧем могу помочь?",
+      timestamp: new Date(),
+      confidence: 1.0,
+      followUpQuestions: [
+        "Покажи статус PMAC контроллера",
+        "Как настроить P-переменные?",
+        "Анализ данных движения"
+      ]
     }
   ]);
   const [inputValue, setInputValue] = useState("");
@@ -42,28 +51,51 @@ export default function ChatPage() {
       timestamp: new Date()
     };
 
+    const messageText = inputValue;
     setMessages(prev => [...prev, userMessage]);
     setInputValue("");
     setIsLoading(true);
 
     try {
-      // Здесь будет интеграция с MCP сервером
-      // Пока используем имитацию ответа
-      await new Promise(resolve => setTimeout(resolve, 1000));
+      // Отправляем запрос к нашему AI API
+      const response = await fetch('/api/chat', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          message: messageText,
+          includeContext: true,
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+
+      const data = await response.json();
+      
+      if (!data.success) {
+        throw new Error(data.error || 'API error');
+      }
       
       const assistantMessage: Message = {
         id: (Date.now() + 1).toString(),
         role: "assistant",
-        content: `Получил ваше сообщение: "${inputValue}". Это имитация ответа от MCP сервера. В реальной реализации здесь будет интеграция с AI моделью через Model Context Protocol.`,
-        timestamp: new Date()
+        content: data.response,
+        timestamp: new Date(),
+        sources: data.sources,
+        confidence: data.confidence,
+        followUpQuestions: data.followUpQuestions,
       };
 
       setMessages(prev => [...prev, assistantMessage]);
     } catch (error) {
+      console.error('Chat error:', error);
       const errorMessage: Message = {
         id: (Date.now() + 1).toString(),
         role: "assistant",
-        content: "Извините, произошла ошибка при обработке вашего запроса. Попробуйте еще раз.",
+        content: "Извините, произошла ошибка при обработке вашего запроса. Проверьте подключение к AI сервису и попробуйте еще раз.",
         timestamp: new Date()
       };
       setMessages(prev => [...prev, errorMessage]);
@@ -103,8 +135,8 @@ export default function ChatPage() {
             </div>
             <div className="flex items-center space-x-4">
               <div className="flex items-center space-x-2 text-sm text-slate-600 dark:text-slate-300">
-                <div className="w-2 h-2 bg-green-500 rounded-full"></div>
-                <span>MCP Server подключен</span>
+                <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></div>
+                <span>AI Assistant активен</span>
               </div>
               <Link
                 href="/mcp"
@@ -155,6 +187,55 @@ export default function ChatPage() {
                     }`}
                   >
                     <p className="text-sm whitespace-pre-wrap">{message.content}</p>
+                    
+                    {/* Confidence indicator for AI messages */}
+                    {message.role === "assistant" && message.confidence !== undefined && (
+                      <div className="mt-2 flex items-center space-x-2">
+                        <TrendingUp className="w-3 h-3" />
+                        <span className="text-xs opacity-70">
+                          Уверенность: {Math.round(message.confidence * 100)}%
+                        </span>
+                      </div>
+                    )}
+                    
+                    {/* Sources for AI messages */}
+                    {message.role === "assistant" && message.sources && message.sources.length > 0 && (
+                      <div className="mt-2 p-2 bg-slate-50 dark:bg-slate-600 rounded text-xs">
+                        <div className="flex items-center space-x-1 mb-1">
+                          <FileText className="w-3 h-3" />
+                          <span className="font-medium">Источники ({message.sources.length}):</span>
+                        </div>
+                        <div className="space-y-1">
+                          {message.sources.slice(0, 3).map((source, idx) => (
+                            <div key={idx} className="text-slate-600 dark:text-slate-300 truncate">
+                              • {source.document?.title || `Документ ${idx + 1}`}
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                    
+                    {/* Follow-up questions */}
+                    {message.role === "assistant" && message.followUpQuestions && message.followUpQuestions.length > 0 && (
+                      <div className="mt-2 p-2 bg-blue-50 dark:bg-blue-900/30 rounded text-xs">
+                        <div className="flex items-center space-x-1 mb-1">
+                          <HelpCircle className="w-3 h-3" />
+                          <span className="font-medium">Похожие вопросы:</span>
+                        </div>
+                        <div className="space-y-1">
+                          {message.followUpQuestions.slice(0, 2).map((question, idx) => (
+                            <button
+                              key={idx}
+                              onClick={() => setInputValue(question)}
+                              className="block text-left text-blue-600 dark:text-blue-400 hover:text-blue-800 dark:hover:text-blue-200 transition-colors"
+                            >
+                              • {question}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                    
                     <p className="text-xs mt-1 opacity-70">
                       {message.timestamp.toLocaleTimeString()}
                     </p>
