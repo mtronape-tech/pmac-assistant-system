@@ -23,7 +23,7 @@
 
 - **Backend**: Node.js, TypeScript, Go, Python
 - **Frontend**: Next.js, TypeScript, ShadcnUI
-- **Databases**: SQLite, Redis (опционально), Vector Database (опционально)
+- **Databases**: SQLite, Vector Database (опционально)
 - **AI/ML**: OpenAI/Anthropic, Scikit-learn, TensorFlow
 - **Infrastructure**: Local development environment
 
