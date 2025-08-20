@@ -4,7 +4,7 @@ import multer from 'multer';
 import { existsSync, mkdirSync } from 'fs';
 import { config } from './config/index.js';
 import { logger } from './utils/logger.js';
-import { WeaviateService } from './services/weaviate-service.js';
+import { VectraService } from './services/vectra-service.js';
 import { AIService } from './services/openai-service.js';
 import { KnowledgeController } from './controllers/knowledge-controller.js';
 
@@ -63,26 +63,26 @@ async function startServer() {
     logger.info('🚀 Запуск Knowledge Base Service...');
 
     // Инициализируем сервисы
-    logger.info('Инициализация Weaviate...');
-    const weaviateService = new WeaviateService();
+    logger.info('Инициализация Vectra...');
+    const vectraService = new VectraService();
     
     logger.info('Инициализация AI сервиса...');
     const aiService = new AIService();
     
     // Проверяем подключения
-    let weaviateHealthy = false;
+    let vectraHealthy = false;
     try {
-      await weaviateService.initialize();
-      weaviateHealthy = await weaviateService.healthCheck();
+      await vectraService.initialize();
+      vectraHealthy = vectraService.isAvailable;
     } catch (error) {
-      logger.warn('⚠️  Weaviate недоступен, переходим в режим in-memory:', error);
-      weaviateHealthy = false;
+      logger.warn('⚠️  Vectra недоступен, переходим в режим in-memory:', error);
+      vectraHealthy = false;
     }
     
     const aiHealthy = await aiService.healthCheck();
     
-    if (!weaviateHealthy) {
-      logger.warn('⚠️  Weaviate недоступен, используем in-memory хранилище');
+    if (!vectraHealthy) {
+      logger.warn('⚠️  Vectra недоступен, используем in-memory хранилище');
     }
     
     if (!aiHealthy) {
@@ -90,7 +90,7 @@ async function startServer() {
     }
 
     // Создаем контроллер
-    const knowledgeController = new KnowledgeController(weaviateService, aiService);
+    const knowledgeController = new KnowledgeController(vectraService, aiService);
 
     // API маршруты
 
@@ -102,7 +102,9 @@ async function startServer() {
     app.post('/ask', knowledgeController.askQuestion);
 
     // Управление документами
+    app.get('/documents', knowledgeController.getDocuments);
     app.post('/documents/upload', upload.single('file'), knowledgeController.uploadDocument);
+    app.post('/documents/:documentId/process', knowledgeController.processDocument);
     app.delete('/documents/:documentId', knowledgeController.deleteDocument);
 
     // Статус обработки

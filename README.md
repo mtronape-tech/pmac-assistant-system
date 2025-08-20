@@ -23,7 +23,7 @@
 
 - **Backend**: Node.js 20+, TypeScript, Python 3.11+
 - **Frontend**: Next.js 14, React, TypeScript, ShadcnUI
-- **Databases**: SQLite, Weaviate (векторная БД)
+- **Databases**: SQLite, Vectra (векторная БД)
 - **AI/ML**: OpenAI/OpenRouter, векторные эмбеддинги
 - **Инфраструктура**: Локальная разработка без Docker
 
@@ -119,7 +119,9 @@
 
 ### 📚 Knowledge Base
 - Загрузка документации (PDF, DOC, TXT, HTML)
-- Векторный поиск с Weaviate
+- Поиск и фильтрация документов
+- Автоматическая категоризация
+- Векторный поиск с Vectra
 - AI-ответы на вопросы
 - Автоматическая обработка документов
 

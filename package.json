@@ -8,15 +8,22 @@
     "services/*"
   ],
   "scripts": {
-    "dev": "powershell -ExecutionPolicy Bypass -File start-all-services.ps1",
-    "start": "powershell -ExecutionPolicy Bypass -File start-all-services.ps1",
-    "stop": "powershell -ExecutionPolicy Bypass -File stop-all-services.ps1",
-    "status": "powershell -ExecutionPolicy Bypass -File check-services-status.ps1",
-    "build": "npm run build --workspaces",
-    "test": "npm run test --workspaces",
-    "lint": "npm run lint --workspaces",
-    "clean": "npm run clean --workspaces",
-    "weaviate": "node start-weaviate.js"
+    "dev": "concurrently \"npm run dev:frontend\" \"npm run dev:backend\"",
+    "dev:frontend": "cd packages/web-frontend ; npm run dev",
+    "dev:backend": "cd services/knowledge-base ; npm run dev",
+    "build": "npm run build:frontend ; npm run build:backend",
+    "build:frontend": "cd packages/web-frontend ; npm run build",
+    "build:backend": "cd services/knowledge-base ; npm run build",
+    "start": "npm run start:frontend & npm run start:backend",
+    "start:frontend": "cd packages/web-frontend ; npm start",
+    "start:backend": "cd services/knowledge-base ; npm start",
+    "test": "npm run test:frontend ; npm run test:backend",
+    "test:frontend": "cd packages/web-frontend ; npm test",
+    "test:backend": "cd services/knowledge-base ; npm test",
+    "clean": "npm run clean:frontend ; npm run clean:backend",
+    "clean:frontend": "cd packages/web-frontend ; rm -rf .next out",
+    "clean:backend": "cd services/knowledge-base ; rm -rf dist",
+    "install:all": "npm install ; cd packages/web-frontend ; npm install ; cd ../../services/knowledge-base ; npm install"
   },
   "devDependencies": {
     "@types/node": "^20.0.0",
@@ -43,7 +50,6 @@
   "author": "PMAC Assistant Team",
   "license": "MIT",
   "dependencies": {
-    "weaviate-ts-client": "^2.2.0",
-    "weaviate-ts-embedded": "^1.2.0"
+    "vectra": "^0.11.1"
   }
 }

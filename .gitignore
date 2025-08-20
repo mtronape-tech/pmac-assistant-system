@@ -116,3 +116,7 @@ embeddings/
 
 # Time series data
 timeseries_data/
+
+# Uploads and data
+services/knowledge-base/uploads/
+services/knowledge-base/data/

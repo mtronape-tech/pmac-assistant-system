@@ -2,73 +2,50 @@ import dotenv from "dotenv";
 
 dotenv.config();
 
-export const config = {
-  port: parseInt(process.env.PORT || "3004", 10),
-  nodeEnv: process.env.NODE_ENV || "development",
-  
-  // База данных (SQLite)
-  database: {
-    path: process.env.DATABASE_PATH || "./analytics.db",
-  },
-  
-
-  
-  // Weaviate (векторная база данных)
-  weaviate: {
-    url: process.env.WEAVIATE_URL || "http://localhost:8080",
-    enabled: process.env.WEAVIATE_ENABLED !== 'false',
-  },
-  
-  // PMAC
+export interface Config {
+  server: {
+    port: number;
+    host: string;
+  };
   pmac: {
-    mode: (process.env.PMAC_MODE || "simulation") as "real" | "simulation",
-    connection: {
-      type: (process.env.PMAC_CONNECTION_TYPE || "ethernet") as "ethernet" | "serial" | "usb",
-      host: process.env.PMAC_HOST || "localhost",
-      port: parseInt(process.env.PMAC_PORT || "1025", 10),
-      device: process.env.PMAC_DEVICE,
-      baudRate: parseInt(process.env.PMAC_BAUDRATE || "115200", 10),
-    },
-    simulation: {
-      dataFile: process.env.PMAC_SIMULATION_DATA_FILE,
-      responseDelay: parseInt(process.env.PMAC_SIMULATION_DELAY || "100", 10),
-    },
+    host: string;
+    port: number;
+    enabled: boolean;
+  };
+  knowledge: {
+    url: string;
+    enabled: boolean;
+  };
+  analytics: {
+    url: string;
+    enabled: boolean;
+  };
+  dataCollection: {
+    url: string;
+    enabled: boolean;
+  };
+}
+
+export const config: Config = {
+  server: {
+    port: parseInt(process.env.PORT || "3004", 10),
+    host: process.env.HOST || "localhost",
   },
-  
-  // PMAC Control Service
-  pmacControl: {
-    enabled: process.env.PMAC_CONTROL_ENABLED !== 'false',
-    host: process.env.PMAC_CONTROL_HOST || 'localhost',
-    port: parseInt(process.env.PMAC_CONTROL_PORT || '3001', 10),
-    timeout: parseInt(process.env.PMAC_CONTROL_TIMEOUT || '5000', 10),
-    maxRetries: parseInt(process.env.PMAC_CONTROL_MAX_RETRIES || '3', 10),
-    retryDelayMs: parseInt(process.env.PMAC_CONTROL_RETRY_DELAY || '1000', 10),
+  pmac: {
+    host: process.env.PMAC_HOST || "localhost",
+    port: parseInt(process.env.PMAC_PORT || "1025", 10),
+    enabled: process.env.PMAC_ENABLED !== 'false',
   },
-  
-  // AI Models
-  ai: {
-    openai: {
-      apiKey: process.env.OPENAI_API_KEY,
-      model: process.env.OPENAI_MODEL || "gpt-4",
-      maxTokens: parseInt(process.env.OPENAI_MAX_TOKENS || "4000", 10),
-    },
-    anthropic: {
-      apiKey: process.env.ANTHROPIC_API_KEY,
-      model: process.env.ANTHROPIC_MODEL || "claude-3-sonnet-20240229",
-      maxTokens: parseInt(process.env.ANTHROPIC_MAX_TOKENS || "4000", 10),
-    },
+  knowledge: {
+    url: process.env.KNOWLEDGE_BASE_URL || "http://localhost:3005",
+    enabled: process.env.KNOWLEDGE_BASE_ENABLED !== 'false',
   },
-  
-  // Логирование
-  logging: {
-    level: process.env.LOG_LEVEL || "info",
-    format: process.env.LOG_FORMAT || "json",
+  analytics: {
+    url: process.env.ANALYTICS_URL || "http://localhost:3002",
+    enabled: process.env.ANALYTICS_ENABLED !== 'false',
   },
-  
-  // Безопасность
-  security: {
-    jwtSecret: process.env.JWT_SECRET || "your-secret-key",
-    jwtExpiresIn: process.env.JWT_EXPIRES_IN || "24h",
-    corsOrigin: process.env.CORS_ORIGIN || "*",
+  dataCollection: {
+    url: process.env.DATA_COLLECTION_URL || "http://localhost:3003",
+    enabled: process.env.DATA_COLLECTION_ENABLED !== 'false',
   },
-} as const;
+};

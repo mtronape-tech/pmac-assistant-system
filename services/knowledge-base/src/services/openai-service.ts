@@ -64,10 +64,9 @@ export class AIService {
   async generateEmbedding(request: EmbeddingRequest): Promise<EmbeddingResponse> {
     try {
       if (!this.client) {
-        logger.warn('AI клиент не инициализирован, возвращаем пустой эмбеддинг');
-        // Возвращаем пустой эмбеддинг для совместимости
+        logger.warn('AI клиент не инициализирован, используем локальный эмбеддинг');
         return {
-          embedding: new Array(1536).fill(0), // OpenAI embedding-3-small размер
+          embedding: this.generateLocalEmbedding(request.text, 1536),
           tokensUsed: 0,
           model: request.model || this.embeddingModel,
         };
@@ -78,8 +77,18 @@ export class AIService {
         input: request.text,
       });
 
+      // Проверяем, что response.data существует и не пустой
+      if (!response.data || response.data.length === 0) {
+        logger.warn('Пустой ответ от AI сервиса, используем локальный эмбеддинг');
+        return {
+          embedding: this.generateLocalEmbedding(request.text, 1536),
+          tokensUsed: 0,
+          model: request.model || this.embeddingModel,
+        };
+      }
+
       const embedding = response.data[0].embedding;
-      const tokensUsed = response.usage.total_tokens;
+      const tokensUsed = response.usage?.total_tokens || 0;
 
       logger.debug(`Сгенерирован эмбеддинг для текста длиной ${request.text.length} символов, использовано ${tokensUsed} токенов (${this.provider})`);
 
@@ -90,9 +99,9 @@ export class AIService {
       };
     } catch (error) {
       logger.error('Ошибка генерации эмбеддинга:', error);
-      // Возвращаем пустой эмбеддинг при ошибке
+      // Возвращаем локальный эмбеддинг при ошибке
       return {
-        embedding: new Array(1536).fill(0),
+        embedding: this.generateLocalEmbedding(request.text, 1536),
         tokensUsed: 0,
         model: request.model || this.embeddingModel,
       };
@@ -102,9 +111,9 @@ export class AIService {
   async generateBatchEmbeddings(texts: string[]): Promise<EmbeddingResponse[]> {
     try {
       if (!this.client) {
-        logger.warn('AI клиент не инициализирован, возвращаем пустые эмбеддинги');
-        return texts.map(() => ({
-          embedding: new Array(1536).fill(0),
+        logger.warn('AI клиент не инициализирован, используем локальные эмбеддинги');
+        return texts.map(t => ({
+          embedding: this.generateLocalEmbedding(t, 1536),
           tokensUsed: 0,
           model: this.embeddingModel,
         }));
@@ -121,11 +130,21 @@ export class AIService {
           input: batch,
         });
 
-        const batchResults = response.data.map((item, index) => ({
-          embedding: item.embedding,
-          tokensUsed: Math.floor(response.usage.total_tokens / batch.length), // Приблизительное распределение
-          model: this.embeddingModel,
-        }));
+        let batchResults: EmbeddingResponse[];
+        if (!response.data || response.data.length === 0) {
+          logger.warn('Пустой ответ от AI сервиса для батча, используем локальные эмбеддинги');
+          batchResults = batch.map(text => ({
+            embedding: this.generateLocalEmbedding(text, 1536),
+            tokensUsed: 0,
+            model: this.embeddingModel,
+          }));
+        } else {
+          batchResults = response.data.map((item, index) => ({
+            embedding: item.embedding,
+            tokensUsed: Math.floor((response.usage?.total_tokens || 0) / batch.length),
+            model: this.embeddingModel,
+          }));
+        }
 
         results.push(...batchResults);
       }
@@ -215,8 +234,8 @@ ${context}`;
     return searchResults
       .slice(0, 5) // Берем топ-5 результатов
       .map((result, index) => {
-        const source = result.document.metadata.filename || result.document.title;
-        const content = result.chunk?.content || result.document.content;
+        const source = (result.document as any).filename || result.document.title;
+        const content = result.chunk?.content || '';
         return `[Источник ${index + 1}: ${source}]\n${content}\n`;
       })
       .join('\n---\n');
@@ -329,6 +348,25 @@ ${content.substring(0, 8000)}${content.length > 8000 ? '...' : ''}
     }
   }
 
+  // Локальный детерминированный эмбеддинг (хеш + позиционное кодирование)
+  private generateLocalEmbedding(text: string, dimension: number): number[] {
+    const vec = new Array(dimension).fill(0);
+    if (!text || text.length === 0) return vec;
+    const norm = (code: number) => (code % 997) / 997; // простая нормализация
+    const len = Math.min(text.length, 5000); // ограничим вклад текста
+    for (let i = 0; i < len; i++) {
+      const code = text.charCodeAt(i);
+      const idx1 = (i * 31 + code) % dimension;
+      const idx2 = (i * 131 + code * 7) % dimension;
+      vec[idx1] += norm(code);
+      vec[idx2] += norm(code * (1 + (i % 7)));
+    }
+    // L2-нормализация
+    const l2 = Math.sqrt(vec.reduce((s, v) => s + v * v, 0)) || 1;
+    for (let i = 0; i < dimension; i++) vec[i] = vec[i] / l2;
+    return vec;
+  }
+
   async extractKeywords(content: string): Promise<string[]> {
     try {
       if (!this.client) {
@@ -369,9 +407,11 @@ ${content.substring(0, 4000)}${content.length > 4000 ? '...' : ''}
   async healthCheck(): Promise<boolean> {
     try {
       if (!this.client) {
-        logger.warn('AI клиент не инициализирован');
+        logger.warn('AI клиент не инициализирован - проверьте API ключи в .env файле');
         return false;
       }
+
+      logger.info(`Проверка подключения к ${this.provider} с моделью ${this.model}`);
       
       const response = await this.client.chat.completions.create({
         model: this.model,
@@ -381,9 +421,38 @@ ${content.substring(0, 4000)}${content.length > 4000 ? '...' : ''}
         ],
       });
 
+      logger.info(`✅ ${this.provider} подключение успешно`);
       return response.choices.length > 0;
-    } catch (error) {
-      logger.error(`Ошибка проверки здоровья ${this.provider}:`, error);
+    } catch (error: any) {
+      // Более подробная диагностика ошибок
+      if (error.status === 403) {
+        if (error.message?.includes('unsupported_country_region_territory')) {
+          logger.error(`❌ ${this.provider}: Ваша страна/регион не поддерживается. Рекомендуется использовать OpenAI или VPN.`);
+        } else {
+          logger.error(`❌ ${this.provider}: Доступ запрещен. Проверьте API ключ или квоты.`);
+        }
+      } else if (error.status === 401) {
+        logger.error(`❌ ${this.provider}: Неверный API ключ. Проверьте OPENAI_API_KEY или OPENROUTER_API_KEY в .env файле.`);
+      } else if (error.status === 429) {
+        logger.error(`❌ ${this.provider}: Превышен лимит запросов. Попробуйте позже.`);
+      } else if (error.code === 'ENOTFOUND' || error.code === 'ECONNREFUSED') {
+        logger.error(`❌ ${this.provider}: Проблемы с подключением к интернету.`);
+      } else {
+        logger.error(`❌ ${this.provider} ошибка:`, {
+          status: error.status,
+          code: error.code,
+          message: error.message,
+          provider: this.provider,
+          model: this.model,
+        });
+      }
+      
+      // Предложения по решению
+      logger.info('💡 Возможные решения:');
+      logger.info('1. Проверьте API ключ в файле services/knowledge-base/.env');
+      logger.info('2. Смените AI_PROVIDER с openrouter на openai в .env');
+      logger.info('3. См. AI_SETUP_GUIDE.md для подробной настройки');
+      
       return false;
     }
   }

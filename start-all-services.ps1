@@ -66,38 +66,42 @@ if (-not (Test-Path "logs")) {
 # Start services in background
 Write-Host "`nStarting services..." -ForegroundColor Cyan
 
+ 
+
 # 1. Data Collection Service (port 3002)
 Write-Host "1. Starting Data Collection Service..." -ForegroundColor Blue
-Start-Process powershell -ArgumentList "-NoExit", "-Command", "cd '$PWD/services/data-collection'; npm run build; if ($LASTEXITCODE -eq 0) { npm run dev } else { Write-Host 'Build failed!' -ForegroundColor Red }" -WindowStyle Minimized
+Start-Process powershell -ArgumentList "-NoExit", "-Command", "cd '$PWD/services/data-collection'; npm run build; if (`$LASTEXITCODE -eq 0) { npm start } else { Write-Host 'Build failed!' -ForegroundColor Red; Read-Host 'Press Enter to close' }"
 Start-Sleep 5
 
 # 2. MCP Server (port 3004)
 Write-Host "2. Starting MCP Server..." -ForegroundColor Blue
-Start-Process powershell -ArgumentList "-NoExit", "-Command", "cd '$PWD/services/mcp-server'; npm run build; if ($LASTEXITCODE -eq 0) { npm run dev } else { Write-Host 'Build failed!' -ForegroundColor Red }" -WindowStyle Minimized
+Start-Process powershell -ArgumentList "-NoExit", "-Command", "cd '$PWD/services/mcp-server'; npm run build; if (`$LASTEXITCODE -eq 0) { npm start } else { Write-Host 'Build failed!' -ForegroundColor Red; Read-Host 'Press Enter to close' }"
 Start-Sleep 5
 
 # 3. PMAC Control Service (port 3001)
 Write-Host "3. Starting PMAC Control Service..." -ForegroundColor Blue
-Start-Process powershell -ArgumentList "-NoExit", "-Command", "cd '$PWD/services/pmac-control'; npm run build; if ($LASTEXITCODE -eq 0) { npm run dev } else { Write-Host 'Build failed!' -ForegroundColor Red }" -WindowStyle Minimized
+Start-Process powershell -ArgumentList "-NoExit", "-Command", "cd '$PWD/services/pmac-control'; npm run build; if (`$LASTEXITCODE -eq 0) { npm start } else { Write-Host 'Build failed!' -ForegroundColor Red; Read-Host 'Press Enter to close' }"
 Start-Sleep 5
 
 # 4. Knowledge Base Service (port 3005)
 Write-Host "4. Starting Knowledge Base Service..." -ForegroundColor Blue
-Start-Process powershell -ArgumentList "-NoExit", "-Command", "cd '$PWD/services/knowledge-base'; npm run build; if ($LASTEXITCODE -eq 0) { node dist/index.js } else { Write-Host 'Build failed!' -ForegroundColor Red }" -WindowStyle Minimized
+Start-Process powershell -ArgumentList "-NoExit", "-Command", "cd '$PWD/services/knowledge-base'; npm run build; if (`$LASTEXITCODE -eq 0) { npm start } else { Write-Host 'Build failed!' -ForegroundColor Red; Read-Host 'Press Enter to close' }"
 Start-Sleep 5
 
 # 5. Analytics Service (port 3003) - Python
 Write-Host "5. Starting Analytics Service..." -ForegroundColor Blue
-Start-Process powershell -ArgumentList "-NoExit", "-Command", "cd '$PWD/services/analytics'; python simple_analytics_service.py" -WindowStyle Minimized
+Start-Process powershell -ArgumentList "-NoExit", "-Command", "cd '$PWD/services/analytics'; python simple_analytics_service.py"
 Start-Sleep 5
 
 # 6. Web Frontend (port 3000)
 Write-Host "6. Starting Web Frontend..." -ForegroundColor Blue
-Start-Process powershell -ArgumentList "-NoExit", "-Command", "cd '$PWD/packages/web-frontend'; npm run dev" -WindowStyle Minimized
+Start-Process powershell -ArgumentList "-NoExit", "-Command", "cd '$PWD/packages/web-frontend'; npm run dev"
 Start-Sleep 5
 
 # Wait for all services to start
 Write-Host "`nWaiting for all services to start..." -ForegroundColor Yellow
+
+ 
 
 $services = @(
     @{Name="Data Collection"; Port=3002},

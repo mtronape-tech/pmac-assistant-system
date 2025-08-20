@@ -3,35 +3,40 @@
 export interface Document {
   id: string;
   title: string;
-  content: string;
-  type: DocumentType;
-  metadata: DocumentMetadata;
-  chunks?: DocumentChunk[];
-  createdAt: Date;
-  updatedAt: Date;
+  filename?: string; // Оригинальное имя файла с расширением
+  fileSize: number;
+  uploadDate: string;
+  author?: string;
+  category?: string;
+  tags: string[];
+  status: 'uploaded' | 'processing' | 'completed' | 'failed';
+  type: DocumentType | 'document';
+  description?: string;
 }
 
 export interface DocumentChunk {
   id: string;
   documentId: string;
   content: string;
-  order: number;
+  pageNumber?: number;
+  chunkIndex?: number;
+  tokens?: number;
   embedding?: number[];
-  metadata: ChunkMetadata;
-  createdAt: Date;
+  metadata?: ChunkMetadata;
+  createdAt?: Date;
 }
 
 export interface DocumentMetadata {
-  filename: string;
-  fileSize: number;
-  mimeType: string;
-  source: string;
+  filename?: string;
+  fileSize?: number;
+  mimeType?: string;
+  source?: string;
   author?: string;
   category?: DocumentCategory;
-  tags: string[];
-  language: string;
-  version: number;
-  checksum: string;
+  tags?: string[];
+  language?: string;
+  version?: number;
+  checksum?: string;
 }
 
 export interface ChunkMetadata {
@@ -95,6 +100,8 @@ export interface ProcessingStep {
 
 export interface SearchQuery {
   query: string;
+  text?: string;
+  embedding?: number[];
   filters?: SearchFilters;
   limit?: number;
   threshold?: number;
@@ -139,7 +146,6 @@ export interface AIResponse {
 
 export interface UploadResult {
   documentId: string;
-  filename: string;
   fileSize: number;
   processingJobId: string;
   status: 'uploaded' | 'processing' | 'completed' | 'failed';
@@ -155,13 +161,6 @@ export interface EmbeddingResponse {
   embedding: number[];
   tokensUsed: number;
   model: string;
-}
-
-export interface WeaviateObject {
-  id: string;
-  class: string;
-  properties: Record<string, any>;
-  vector?: number[];
 }
 
 export interface TextChunk {
@@ -189,17 +188,14 @@ export interface ProcessingStats {
   queueSize: number;
 }
 
-export interface SystemHealth {
-  weaviateConnected: boolean;
-  openaiConnected: boolean;
-  diskSpace: {
-    available: number;
-    used: number;
-    total: number;
-  };
-  memoryUsage: {
-    used: number;
-    total: number;
+export interface HealthStatus {
+  status: 'healthy' | 'unhealthy' | 'degraded';
+  timestamp: string;
+  services: {
+    vectra: boolean;
+    openai: boolean;
+    fileSystem: boolean;
   };
   uptime: number;
+  version: string;
 }

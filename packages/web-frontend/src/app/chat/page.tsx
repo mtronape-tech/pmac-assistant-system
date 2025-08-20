@@ -15,27 +15,34 @@ interface Message {
 }
 
 export default function ChatPage() {
-  const [messages, setMessages] = useState<Message[]>([
-    {
-      id: "1",
-      role: "assistant",
-      content: "Привет! Я AI помощник для работы с PMAC контроллером. Интегрирован с базой знаний и инструментами управления.\n\n✨ Возможности:\n• Ответы на технические вопросы\n• Анализ данных контроллера\n• Помощь с настройкой переменных\n• Поиск в документации\n• Диагностика проблем\n\nЧем могу помочь?",
-      timestamp: new Date(),
-      confidence: 1.0,
-      followUpQuestions: [
-        "Покажи статус PMAC контроллера",
-        "Как настроить P-переменные?",
-        "Анализ данных движения"
-      ]
-    }
-  ]);
+  const [messages, setMessages] = useState<Message[]>([]);
   const [inputValue, setInputValue] = useState("");
   const [isLoading, setIsLoading] = useState(false);
+  const [isMounted, setIsMounted] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   };
+
+  // Initialize welcome message on client side only
+  useEffect(() => {
+    setIsMounted(true);
+    setMessages([
+      {
+        id: "1",
+        role: "assistant",
+        content: "Привет! Я AI помощник для работы с PMAC контроллером. Интегрирован с базой знаний и инструментами управления.\n\n✨ Возможности:\n• Ответы на технические вопросы\n• Анализ данных контроллера\n• Помощь с настройкой переменных\n• Поиск в документации\n• Диагностика проблем\n\nЧем могу помочь?",
+        timestamp: new Date(),
+        confidence: 1.0,
+        followUpQuestions: [
+          "Покажи статус PMAC контроллера",
+          "Как настроить P-переменные?",
+          "Анализ данных движения"
+        ]
+      }
+    ]);
+  }, []);
 
   useEffect(() => {
     scrollToBottom();
@@ -45,7 +52,7 @@ export default function ChatPage() {
     if (!inputValue.trim() || isLoading) return;
 
     const userMessage: Message = {
-      id: Date.now().toString(),
+      id: `user-${Date.now()}`,
       role: "user",
       content: inputValue,
       timestamp: new Date()
@@ -79,8 +86,8 @@ export default function ChatPage() {
         throw new Error(data.error || 'API error');
       }
       
-      const assistantMessage: Message = {
-        id: (Date.now() + 1).toString(),
+              const assistantMessage: Message = {
+          id: `assistant-${Date.now()}`,
         role: "assistant",
         content: data.response,
         timestamp: new Date(),
@@ -92,8 +99,8 @@ export default function ChatPage() {
       setMessages(prev => [...prev, assistantMessage]);
     } catch (error) {
       console.error('Chat error:', error);
-      const errorMessage: Message = {
-        id: (Date.now() + 1).toString(),
+              const errorMessage: Message = {
+          id: `error-${Date.now()}`,
         role: "assistant",
         content: "Извините, произошла ошибка при обработке вашего запроса. Проверьте подключение к AI сервису и попробуйте еще раз.",
         timestamp: new Date()
@@ -110,6 +117,15 @@ export default function ChatPage() {
       handleSendMessage();
     }
   };
+
+  // Prevent hydration mismatch by waiting for client-side mount
+  if (!isMounted) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-slate-50 to-blue-50 dark:from-slate-900 dark:to-slate-800 flex items-center justify-center">
+        <div className="text-slate-600 dark:text-slate-400">Загрузка...</div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 to-blue-50 dark:from-slate-900 dark:to-slate-800">

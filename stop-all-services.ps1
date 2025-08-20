@@ -6,12 +6,12 @@ Write-Host "🛑 Остановка PMAC Assistant System" -ForegroundColor Red
 Write-Host "==========================================" -ForegroundColor Red
 
 # Порты всех сервисов
-$ports = @(3000, 3001, 3002, 3003, 3004, 3005)
-$serviceNames = @{
-    3000 = "Web Frontend"
+$ports = @(3000, 3001, 3002, 3003, 3004, 3005, 8080)
+$services = @{
+    3000 = "Frontend (Next.js)"
     3001 = "PMAC Control"
-    3002 = "Data Collection"
-    3003 = "Analytics"
+    3002 = "Analytics"
+    3003 = "Data Collection"
     3004 = "MCP Server"
     3005 = "Knowledge Base"
 }
@@ -24,14 +24,14 @@ foreach ($port in $ports) {
             try {
                 $processName = (Get-Process -Id $processId -ErrorAction SilentlyContinue).ProcessName
                 Stop-Process -Id $processId -Force -ErrorAction SilentlyContinue
-                Write-Host "✅ Остановлен $($serviceNames[$port]) (PID: $processId, $processName)" -ForegroundColor Green
+                Write-Host "✅ Остановлен $($services[$port]) (PID: $processId, $processName)" -ForegroundColor Green
             }
             catch {
                 Write-Host "❌ Не удалось остановить процесс $processId на порту $port" -ForegroundColor Red
             }
         }
     } else {
-        Write-Host "ℹ️  $($serviceNames[$port]) не запущен" -ForegroundColor Gray
+        Write-Host "ℹ️  $($services[$port]) не запущен" -ForegroundColor Gray
     }
 }
 
