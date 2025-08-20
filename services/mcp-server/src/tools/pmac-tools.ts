@@ -33,7 +33,7 @@ export async function setupPMACTools(
     try {
       let value: number;
 
-      if (config.pmac.mode === "simulation") {
+      if (config.pmac.enabled) {
         value = await pmacSimulator.readVariable(variableType, address);
       } else {
         // В реальном режиме здесь будет подключение к PMAC контроллеру
@@ -108,7 +108,7 @@ export async function setupPMACTools(
         };
       }
 
-      if (config.pmac.mode === "simulation") {
+      if (config.pmac.enabled) {
         await pmacSimulator.writeVariable(variableType, address, value);
       } else {
         // В реальном режиме здесь будет подключение к PMAC контроллеру
@@ -164,7 +164,7 @@ export async function setupPMACTools(
     try {
       let status: any;
 
-      if (config.pmac.mode === "simulation") {
+      if (config.pmac.enabled) {
         status = await pmacSimulator.getStatus();
       } else {
         // В реальном режиме здесь будет подключение к PMAC контроллеру
@@ -234,7 +234,7 @@ export async function setupPMACTools(
 
       let result: any;
 
-      if (config.pmac.mode === "simulation") {
+      if (config.pmac.enabled) {
         result = await pmacSimulator.executeCommand(command);
       } else {
         // В реальном режиме здесь будет подключение к PMAC контроллеру

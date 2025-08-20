@@ -20,7 +20,7 @@ const consoleFormat = winston.format.combine(
 );
 
 export const logger = winston.createLogger({
-  level: config.logging.level,
+  level: "info", // Фиксированный уровень логирования
   format: logFormat,
   defaultMeta: { service: "pmac-mcp-server" },
   transports: [

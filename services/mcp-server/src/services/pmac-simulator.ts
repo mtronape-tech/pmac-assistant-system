@@ -198,7 +198,7 @@ export class PMACSimulator {
   }
 
   private async simulateDelay(): Promise<void> {
-    const delay = config.pmac.simulation.responseDelay;
+    const delay = 100; // Фиксированная задержка 100мс
     if (delay > 0) {
       await new Promise(resolve => setTimeout(resolve, delay));
     }

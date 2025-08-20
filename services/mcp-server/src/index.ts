@@ -125,7 +125,7 @@ async function main() {
     });
 
     // Запуск сервера
-    const PORT = config.port;
+    const PORT = config.server.port;
     app.listen(PORT, () => {
       logger.info(`MCP сервер запущен на порту ${PORT}`);
       logger.info(`Health check: http://localhost:${PORT}/health`);

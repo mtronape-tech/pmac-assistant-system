@@ -12,6 +12,11 @@ export interface Config {
     port: number;
     enabled: boolean;
   };
+  pmacControl: {
+    host: string;
+    port: number;
+    enabled: boolean;
+  };
   knowledge: {
     url: string;
     enabled: boolean;
@@ -35,6 +40,11 @@ export const config: Config = {
     host: process.env.PMAC_HOST || "localhost",
     port: parseInt(process.env.PMAC_PORT || "1025", 10),
     enabled: process.env.PMAC_ENABLED !== 'false',
+  },
+  pmacControl: {
+    host: process.env.PMAC_CONTROL_HOST || "localhost",
+    port: parseInt(process.env.PMAC_CONTROL_PORT || "1026", 10),
+    enabled: process.env.PMAC_CONTROL_ENABLED !== 'false',
   },
   knowledge: {
     url: process.env.KNOWLEDGE_BASE_URL || "http://localhost:3005",
