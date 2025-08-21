@@ -15,6 +15,8 @@
 
 - **Node.js**: версия 18+ (для поддержки fetch API)
 - **npm**: версия 8+
+- **Python**: версия 3.11+ (для Analytics сервиса)
+- **pip**: версия 21.0+ (для установки Python пакетов)
 - **PowerShell**: для Windows (или bash для Linux/Mac)
 
 ## 📦 Установка
@@ -26,6 +28,8 @@ cd RAG
 ```
 
 ### 2. Установка зависимостей
+
+#### Node.js зависимости
 ```bash
 # Установка корневых зависимостей
 npm install
@@ -34,11 +38,53 @@ npm install
 npm run install:all
 ```
 
+#### Python зависимости (для Analytics сервиса)
+
+**Автоматическая установка (рекомендуется):**
+```bash
+# Windows PowerShell
+powershell -ExecutionPolicy Bypass -File .\install-python-deps.ps1
+
+# Linux/Mac
+chmod +x install-python-deps.sh
+./install-python-deps.sh
+```
+
+**Ручная установка:**
+```bash
+# Перейдите в директорию Analytics
+cd services/analytics
+
+# Создайте виртуальное окружение (рекомендуется)
+python -m venv venv
+
+# Активация виртуального окружения
+# Windows:
+venv\Scripts\activate
+# Linux/Mac:
+source venv/bin/activate
+
+# Установка зависимостей
+pip install -r requirements.txt
+
+# Возврат в корневую директорию
+cd ../..
+```
+
 ## 🔧 Конфигурация
 
 ### AI Provider настройка
 
-Создайте файл `services/knowledge-base/config.ini`:
+**Создайте файл конфигурации из шаблона:**
+```bash
+# Windows
+copy services\knowledge-base\config.ini.template services\knowledge-base\config.ini
+
+# Linux/Mac
+cp services/knowledge-base/config.ini.template services/knowledge-base/config.ini
+```
+
+**Отредактируйте `services/knowledge-base/config.ini`:**
 
 ```ini
 [AI]
