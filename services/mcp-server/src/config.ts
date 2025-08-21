@@ -43,7 +43,7 @@ export const config: Config = {
   },
   pmacControl: {
     host: process.env.PMAC_CONTROL_HOST || "localhost",
-    port: parseInt(process.env.PMAC_CONTROL_PORT || "1026", 10),
+    port: parseInt(process.env.PMAC_CONTROL_PORT || "3001", 10),
     enabled: process.env.PMAC_CONTROL_ENABLED !== 'false',
   },
   knowledge: {
@@ -51,11 +51,11 @@ export const config: Config = {
     enabled: process.env.KNOWLEDGE_BASE_ENABLED !== 'false',
   },
   analytics: {
-    url: process.env.ANALYTICS_URL || "http://localhost:3002",
+    url: process.env.ANALYTICS_URL || "http://localhost:3003",
     enabled: process.env.ANALYTICS_ENABLED !== 'false',
   },
   dataCollection: {
-    url: process.env.DATA_COLLECTION_URL || "http://localhost:3003",
+    url: process.env.DATA_COLLECTION_URL || "http://localhost:3002",
     enabled: process.env.DATA_COLLECTION_ENABLED !== 'false',
   },
 };

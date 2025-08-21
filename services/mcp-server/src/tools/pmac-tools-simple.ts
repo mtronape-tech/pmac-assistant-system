@@ -1,6 +1,7 @@
 import { Server as McpServer } from "@modelcontextprotocol/sdk/server/index.js";
 import { z } from "zod";
 import { DatabaseService } from "../services/database.js";
+import fetch from "node-fetch";
 
 import { logger } from "../utils/logger.js";
 import { config } from "../config.js";

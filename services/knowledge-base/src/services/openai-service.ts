@@ -10,7 +10,7 @@ import type {
 
 export class AIService {
   private client: OpenAI | null = null;
-  private provider: 'openai' | 'openrouter';
+  private provider: 'openai' | 'openrouter' | 'zai';
   private model: string = '';
   private embeddingModel: string = '';
   private maxTokens: number = 4000;
@@ -38,6 +38,25 @@ export class AIService {
           this.maxTokens = config.ai.openrouter.maxTokens;
           
           logger.info(`Инициализирован AIService с провайдером OpenRouter, модель: ${this.model}`);
+        }
+      } else if (this.provider === 'zai') {
+        if (!config.ai.zai.apiKey) {
+          logger.warn('Z.AI API ключ не настроен, AI функции будут отключены');
+          this.client = null as any;
+        } else {
+          this.client = new OpenAI({
+            apiKey: config.ai.zai.apiKey,
+            baseURL: config.ai.zai.baseUrl,
+            defaultHeaders: {
+              'Authorization': `Bearer ${config.ai.zai.apiKey}`,
+            },
+          });
+          
+          this.model = config.ai.zai.model;
+          this.embeddingModel = config.ai.zai.embeddingModel;
+          this.maxTokens = config.ai.zai.maxTokens;
+          
+          logger.info(`Инициализирован AIService с провайдером Z.AI, модель: ${this.model}`);
         }
       } else {
         if (!config.ai.openai.apiKey) {

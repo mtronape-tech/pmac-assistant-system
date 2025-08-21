@@ -1,164 +1,295 @@
-# PMAC Assistant System
+# PMAC Assistant System - RAG с AI
 
-Интеллектуальный помощник для наладчиков станков с ЧПУ на базе контроллера Turbo PMAC.
+Система для работы с документами PMAC с использованием Retrieval-Augmented Generation (RAG) и AI моделей.
 
-## 🎯 Описание
+## 🚀 Возможности
 
-Система помощника наладчика станков с ЧПУ (PMAC Assistant System) представляет собой модульную веб-платформу с микросервисной архитектурой. Система обеспечивает интеллектуальное взаимодействие с контроллером PMAC через ИИ помощника, управление переменными, сбор и анализ данных в реальном времени, а также предоставление рекомендаций.
+- **Document Processing**: Загрузка и обработка PDF, DOC, DOCX, TXT, HTML, MD файлов
+- **AI Integration**: Интеграция с OpenAI, OpenRouter и Z.AI моделями
+- **Vector Search**: Семантический поиск по документам с использованием Vectra
+- **PMAC Control**: Управление PMAC устройствами через MCP Server
+- **Analytics**: Аналитика и мониторинг системы
+- **Web Interface**: Веб-интерфейс для взаимодействия с системой
 
-## 🏗️ Архитектура системы
+## 🛠️ Требования
 
-Система состоит из 6 микросервисов:
+- **Node.js**: версия 18+ (для поддержки fetch API)
+- **npm**: версия 8+
+- **PowerShell**: для Windows (или bash для Linux/Mac)
 
-| Сервис | Порт | Технология | Описание |
-|--------|------|------------|----------|
-| 🌐 **Web Frontend** | 3000 | Next.js + TypeScript | Веб-интерфейс системы |
-| 🎛️ **PMAC Control** | 3001 | Node.js + TypeScript | Управление контроллером PMAC |
-| 📡 **Data Collection** | 3002 | Node.js + TypeScript | Сбор данных в реальном времени |
-| 📊 **Analytics** | 3003 | Python + FastAPI | Аналитика и визуализация |
-| 🤖 **MCP Server** | 3004 | Node.js + TypeScript | AI интеграция и инструменты |
-| 📚 **Knowledge Base** | 3005 | Node.js + TypeScript | База знаний с векторным поиском |
+## 📦 Установка
 
-## 🛠️ Технологический стек
-
-- **Backend**: Node.js 20+, TypeScript, Python 3.11+
-- **Frontend**: Next.js 14, React, TypeScript, ShadcnUI
-- **Databases**: SQLite, Vectra (векторная БД)
-- **AI/ML**: OpenAI/OpenRouter, векторные эмбеддинги
-- **Инфраструктура**: Локальная разработка без Docker
-
-## 🚀 Быстрый старт
-
-### Предварительные требования
-
-- **Node.js 20+** (рекомендуется LTS версия)
-- **Python 3.11+** (для Analytics сервиса)
-- **Git** для клонирования репозитория
-- **PowerShell** (Windows) или **Bash** (Linux/macOS)
-
-### Установка и запуск
-
-1. **Клонируйте репозиторий:**
-   ```bash
-   git clone https://github.com/mtronape-tech/pmac-assistant-system.git
-   cd pmac-assistant-system
-   ```
-
-2. **Установите зависимости для всех сервисов:**
-   ```bash
-   # Установка Node.js зависимостей
-   npm install
-   
-   # Установка Python зависимостей для Analytics
-   cd services/analytics
-   pip install -r requirements.txt
-   cd ../..
-   ```
-
-3. **Запустите все сервисы одной командой:**
-   ```powershell
-   # Windows PowerShell
-   .\start-all-services.ps1
-   
-   # Или через npm
-   npm run dev
-   ```
-
-4. **Проверьте статус сервисов:**
-   ```powershell
-   .\check-services-status.ps1
-   ```
-
-### 🌐 Доступные интерфейсы
-
-После запуска будут доступны:
-
-- **🏠 Главная страница:** http://localhost:3000
-- **🎛️ PMAC Control:** http://localhost:3001
-- **📡 Data Collection:** http://localhost:3002  
-- **📊 Analytics API:** http://localhost:3003/docs
-- **🤖 MCP Server:** http://localhost:3004
-- **📚 Knowledge Base:** http://localhost:3005/api
-
-## ✨ Особенности архитектуры
-
-- ✅ **Без Docker** - все сервисы работают локально
-- ✅ **SQLite** - простая файловая база данных 
-- ✅ **Быстрый запуск** - система готова за 30 секунд
-- ✅ **Простая разработка** - работает на любой машине
-- ✅ **AI-Ready** - интегрирован с OpenAI/OpenRouter
-- ✅ **Микросервисы** - каждый компонент независим
-- ✅ **Real-time** - WebSocket для данных в реальном времени
-- ✅ **Fallback режимы** - работает даже без внешних сервисов
-
-## 📖 Функциональность
-
-### 🎛️ PMAC Control
-- Чтение/запись переменных P, Q, I, M, L
-- Выполнение команд контроллера
-- Мониторинг статуса системы и осей
-- Встроенный симулятор для разработки
-
-### 📡 Data Collection  
-- Автоматический сбор данных с контроллера
-- Настраиваемые интервалы сбора
-- WebSocket streaming в реальном времени
-- Мониторинг качества данных
-
-### 📊 Analytics
-- Визуализация данных (Plotly, Matplotlib)
-- Анализ трендов и аномалий
-- Автоматическая генерация отчетов
-- RESTful API с Swagger документацией
-
-### 🤖 MCP Server
-- AI интеграция через MCP Protocol
-- Умные инструменты для работы с PMAC
-- Генерация рекомендаций
-- Интеграция с базой знаний
-
-### 📚 Knowledge Base
-- Загрузка документации (PDF, DOC, TXT, HTML)
-- Поиск и фильтрация документов
-- Автоматическая категоризация
-- Векторный поиск с Vectra
-- AI-ответы на вопросы
-- Автоматическая обработка документов
-
-### 🌐 Web Frontend
-- Современный интерфейс на Next.js
-- Адаптивный дизайн
-- Real-time обновления
-- Интуитивная навигация
-
-## 🔧 Управление системой
-
-```powershell
-# Запуск всех сервисов
-.\start-all-services.ps1
-
-# Проверка статуса
-.\check-services-status.ps1
-
-# Остановка всех сервисов  
-.\stop-all-services.ps1
+### 1. Клонирование репозитория
+```bash
+git clone <your-repo-url>
+cd RAG
 ```
 
-## 📚 Документация
+### 2. Установка зависимостей
+```bash
+# Установка корневых зависимостей
+npm install
 
-- [📋 Управление сервисами](./SERVICES_README.md)
-- [📝 Техническое задание](./pmac-assistant-system/requirements.md)
-- [🏗️ Дизайн системы](./pmac-assistant-system/design.md)
-- [📋 План реализации](./pmac-assistant-system/tasks.md)
-- [✅ Результаты тестирования](./TESTING_SUMMARY.md)
+# Установка зависимостей для всех сервисов
+npm run install:all
+```
 
-## 🤝 Участие в разработке
+## 🔧 Конфигурация
 
-1. Форкните репозиторий
-2. Создайте ветку для новой функции
-3. Внесите изменения и напишите тесты
-4. Отправьте Pull Request
+### AI Provider настройка
+
+Создайте файл `services/knowledge-base/config.ini`:
+
+```ini
+[AI]
+provider=openrouter
+
+[OpenRouter]
+api_key=your_openrouter_api_key_here
+base_url=https://openrouter.ai/api/v1
+model=z-ai/glm-4.5-air:free
+embedding_model=text-embedding-3-small
+max_tokens=4000
+
+[Server]
+port=3005
+host=0.0.0.0
+
+[Vectra]
+data_path=./data
+index_name=vectra
+
+[Processing]
+chunk_size=1200
+chunk_overlap=200
+max_concurrent_jobs=3
+job_timeout=300000
+
+[Upload]
+max_file_size=10485760
+allowed_file_types=pdf,doc,docx,txt,html,md
+upload_dir=./uploads
+```
+
+### Получение API ключа
+
+1. Зарегистрируйтесь на [OpenRouter](https://openrouter.ai/)
+2. Получите API ключ
+3. Вставьте ключ в `config.ini`
+
+## 🚀 Запуск системы
+
+### Быстрый запуск всех сервисов
+```powershell
+# Windows PowerShell
+powershell -ExecutionPolicy Bypass -File .\start-all-services.ps1
+```
+
+### Ручной запуск сервисов
+
+#### 1. Data Collection Service (порт 3002)
+```bash
+cd services/data-collection
+npm run build
+npm start
+```
+
+#### 2. MCP Server (порт 3004)
+```bash
+cd services/mcp-server
+npm run build
+npm start
+```
+
+#### 3. PMAC Control Service (порт 3001)
+```bash
+cd services/pmac-control
+npm run build
+npm start
+```
+
+#### 4. Knowledge Base Service (порт 3005)
+```bash
+cd services/knowledge-base
+npm run build
+npm start
+```
+
+#### 5. Analytics Service (порт 3003)
+```bash
+cd services/analytics
+npm run build
+npm start
+```
+
+#### 6. Web Frontend (порт 3000)
+```bash
+cd services/web-frontend
+npm run build
+npm start
+```
+
+## 📊 Проверка статуса
+
+### Health Check всех сервисов
+```bash
+# Data Collection
+curl http://localhost:3002/health
+
+# MCP Server
+curl http://localhost:3004/health
+
+# PMAC Control
+curl http://localhost:3001/health
+
+# Knowledge Base
+curl http://localhost:3005/health
+
+# Analytics
+curl http://localhost:3003/health
+
+# Web Frontend
+curl http://localhost:3000
+```
+
+### Скрипт проверки статуса
+```powershell
+powershell -ExecutionPolicy Bypass -File .\check-services-status.ps1
+```
+
+## 🛑 Остановка системы
+
+### Остановка всех сервисов
+```powershell
+powershell -ExecutionPolicy Bypass -File .\stop-all-services.ps1
+```
+
+## 🔍 Использование
+
+### 1. Загрузка документов
+```bash
+curl -X POST -F "file=@document.pdf" http://localhost:3005/documents/upload
+```
+
+### 2. Поиск по документам
+```bash
+curl -X POST -H "Content-Type: application/json" \
+  -d '{"query":"поисковый запрос"}' \
+  http://localhost:3005/search
+```
+
+### 3. AI вопросы
+```bash
+curl -X POST -H "Content-Type: application/json" \
+  -d '{"query":"ваш вопрос"}' \
+  http://localhost:3005/ask
+```
+
+### 4. Веб-интерфейс
+Откройте браузер и перейдите на `http://localhost:3000`
+
+## 🏗️ Архитектура
+
+```
+┌─────────────────┐    ┌─────────────────┐    ┌─────────────────┐
+│   Web Frontend  │    │  PMAC Control   │    │  Data Collection│
+│   (Port 3000)   │    │   (Port 3001)   │    │   (Port 3002)   │
+└─────────────────┘    └─────────────────┘    └─────────────────┘
+         │                       │                       │
+         └───────────────────────┼───────────────────────┘
+                                 │
+                    ┌─────────────────┐
+                    │   MCP Server    │
+                    │   (Port 3004)   │
+                    └─────────────────┘
+                                 │
+                    ┌─────────────────┐
+                    │  Knowledge Base │
+                    │   (Port 3005)   │
+                    └─────────────────┘
+                                 │
+                    ┌─────────────────┐
+                    │    Analytics    │
+                    │   (Port 3003)   │
+                    └─────────────────┘
+```
+
+## 🔧 Разработка
+
+### Сборка проекта
+```bash
+# Сборка всех сервисов
+npm run build:all
+
+# Сборка конкретного сервиса
+cd services/service-name
+npm run build
+```
+
+### Разработка с hot reload
+```bash
+cd services/service-name
+npm run dev
+```
+
+### Тестирование
+```bash
+npm test
+```
+
+## 📁 Структура проекта
+
+```
+RAG/
+├── services/
+│   ├── analytics/           # Аналитика и мониторинг
+│   ├── data-collection/     # Сбор данных
+│   ├── knowledge-base/      # База знаний с AI
+│   ├── mcp-server/          # MCP сервер
+│   ├── pmac-control/        # Управление PMAC
+│   └── web-frontend/        # Веб-интерфейс
+├── packages/
+│   └── shared-types/        # Общие типы
+├── scripts/                  # Скрипты запуска
+├── config.ini               # Конфигурация AI
+└── README.md                # Документация
+```
+
+## 🐛 Устранение неполадок
+
+### Порт уже используется
+```bash
+# Windows
+netstat -ano | findstr :3005
+taskkill /PID <PID> /F
+
+# Linux/Mac
+lsof -i :3005
+kill -9 <PID>
+```
+
+### Проблемы с AI
+1. Проверьте API ключ в `config.ini`
+2. Убедитесь, что модель доступна в OpenRouter
+3. Проверьте логи сервиса
+
+### Проблемы с PMAC Control
+1. Проверьте подключение к PMAC устройству
+2. Убедитесь, что порт 3001 свободен
+3. Проверьте логи MCP Server
+
+## 📞 Поддержка
+
+При возникновении проблем:
+1. Проверьте логи сервисов
+2. Убедитесь, что все зависимости установлены
+3. Проверьте конфигурацию в `config.ini`
+4. Создайте issue в репозитории
 
 ## 📄 Лицензия
 
-MIT License - см. файл [LICENSE](LICENSE)
+MIT License
+
+---
+
+**PMAC Assistant System** - мощная система для работы с документами PMAC с использованием современных AI технологий.

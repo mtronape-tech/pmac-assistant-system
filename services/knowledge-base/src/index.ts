@@ -27,13 +27,13 @@ app.use((req, res, next) => {
 });
 
 // Настройка загрузки файлов
-if (!existsSync(config.uploads.uploadDir)) {
-  mkdirSync(config.uploads.uploadDir, { recursive: true });
+if (!existsSync(config.upload.uploadPath)) {
+  mkdirSync(config.upload.uploadPath, { recursive: true });
 }
 
 const storage = multer.diskStorage({
   destination: (req, file, cb) => {
-    cb(null, config.uploads.uploadDir);
+    cb(null, config.upload.uploadPath);
   },
   filename: (req, file, cb) => {
     const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
@@ -44,13 +44,13 @@ const storage = multer.diskStorage({
 const upload = multer({
   storage,
   limits: {
-    fileSize: config.uploads.maxFileSize,
+    fileSize: config.upload.maxFileSize,
   },
   fileFilter: (req, file, cb) => {
-    const allowedExtensions = config.uploads.allowedTypes.map(ext => `.${ext}`);
+    const allowedExtensions = config.upload.allowedTypes.map(ext => `.${ext}`);
     const fileExtension = file.originalname.toLowerCase().split('.').pop();
     
-    if (fileExtension && config.uploads.allowedTypes.includes(fileExtension)) {
+    if (fileExtension && config.upload.allowedTypes.includes(fileExtension)) {
       cb(null, true);
     } else {
       cb(new Error(`Тип файла .${fileExtension} не поддерживается. Разрешены: ${allowedExtensions.join(', ')}`));
@@ -161,11 +161,11 @@ async function startServer() {
           },
         },
         configuration: {
-          supportedFileTypes: config.uploads.allowedTypes,
-          maxFileSize: `${Math.floor(config.uploads.maxFileSize / 1024 / 1024)}MB`,
-          aiProvider: config.ai.provider,
-          embeddingModel: config.ai.provider === 'openrouter' ? config.ai.openrouter.embeddingModel : config.ai.openai.embeddingModel,
-          aiModel: config.ai.provider === 'openrouter' ? config.ai.openrouter.model : config.ai.openai.model,
+          supportedFileTypes: config.upload.allowedTypes,
+          maxFileSize: `${Math.floor(config.upload.maxFileSize / 1024 / 1024)}MB`,
+          aiProvider: 'openai',
+          embeddingModel: 'text-embedding-3-small',
+          aiModel: config.ai.openai.model,
         },
       });
     });
@@ -197,7 +197,7 @@ async function startServer() {
           return res.status(400).json({
             success: false,
             error: 'Файл слишком большой',
-            maxSize: `${Math.floor(config.uploads.maxFileSize / 1024 / 1024)}MB`,
+            maxSize: `${Math.floor(config.upload.maxFileSize / 1024 / 1024)}MB`,
           });
         }
         

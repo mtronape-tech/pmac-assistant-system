@@ -1,6 +1,41 @@
-import { config as dotenvConfig } from 'dotenv';
+import { readFileSync } from 'fs';
+import { parse } from 'ini';
+import { logger } from '../utils/logger.js';
+import path from 'path';
+import { fileURLToPath } from 'url';
 
-dotenvConfig();
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
+// Загружаем config.ini файл
+const configPath = path.join(__dirname, '../../config.ini');
+let configData: any = {};
+
+try {
+  const configContent = readFileSync(configPath, 'utf-8');
+  configData = parse(configContent);
+  logger.info('Конфигурация загружена из config.ini');
+} catch (error) {
+  logger.error('Ошибка загрузки config.ini:', error);
+  // Используем значения по умолчанию
+  configData = {
+    AI: { provider: 'openrouter' },
+    OpenRouter: {
+      api_key: '',
+      base_url: 'https://openrouter.ai/api/v1',
+      model: 'mistralai/mistral-7b-instruct:free',
+      embedding_model: 'text-embedding-3-small',
+      max_tokens: '4000'
+    }
+  };
+}
+
+// Отладочная информация
+logger.info('Загружаем конфигурацию...');
+logger.info(`AI_PROVIDER: ${configData.AI?.provider}`);
+logger.info(`OPENROUTER_API_KEY: ${configData.OpenRouter?.api_key ? '***' : 'не установлен'}`);
+logger.info(`OPENROUTER_BASE_URL: ${configData.OpenRouter?.base_url}`);
+logger.info(`OPENROUTER_MODEL: ${configData.OpenRouter?.model}`);
 
 export interface Config {
   server: {
@@ -15,11 +50,28 @@ export interface Config {
     dataPath: string;
     indexName: string;
   };
-  openai: {
-    apiKey: string;
-    model: string;
-    maxTokens: number;
-    temperature: number;
+  ai: {
+    provider: 'openai' | 'openrouter' | 'zai';
+    openai: {
+      apiKey: string;
+      model: string;
+      embeddingModel: string;
+      maxTokens: number;
+    };
+    openrouter: {
+      baseUrl: string;
+      apiKey: string;
+      model: string;
+      embeddingModel: string;
+      maxTokens: number;
+    };
+    zai: {
+      baseUrl: string;
+      apiKey: string;
+      model: string;
+      embeddingModel: string;
+      maxTokens: number;
+    };
   };
   upload: {
     maxFileSize: number;
@@ -29,35 +81,56 @@ export interface Config {
   processing: {
     maxConcurrentJobs: number;
     jobTimeout: number;
+    chunkSize: number;
+    chunkOverlap: number;
   };
 }
 
 export const config: Config = {
   server: {
-    port: parseInt(process.env.KNOWLEDGE_BASE_PORT || '3005'),
-    host: process.env.KNOWLEDGE_BASE_HOST || '0.0.0.0',
+    port: parseInt(configData.Server?.port || '3005'),
+    host: configData.Server?.host || '0.0.0.0',
     cors: {
-      origin: (process.env.CORS_ORIGIN || 'http://localhost:3000').split(','),
+      origin: ['http://localhost:3000'],
       credentials: true,
     },
   },
   vectra: {
-    dataPath: process.env.VECTRA_DATA_PATH || './data',
-    indexName: process.env.VECTRA_INDEX_NAME || 'vectra',
+    dataPath: configData.Vectra?.data_path || './data',
+    indexName: configData.Vectra?.index_name || 'vectra',
   },
-  openai: {
-    apiKey: process.env.OPENAI_API_KEY || '',
-    model: process.env.OPENAI_MODEL || 'gpt-4',
-    maxTokens: parseInt(process.env.OPENAI_MAX_TOKENS || '4000'),
-    temperature: parseFloat(process.env.OPENAI_TEMPERATURE || '0.7'),
+  ai: {
+    provider: (configData.AI?.provider as 'openai' | 'openrouter' | 'zai') || 'openrouter',
+    openai: {
+      apiKey: configData.OpenAI?.api_key || '',
+      model: configData.OpenAI?.model || 'gpt-4o-mini',
+      embeddingModel: configData.OpenAI?.embedding_model || 'text-embedding-3-small',
+      maxTokens: parseInt(configData.OpenAI?.max_tokens || '4000'),
+    },
+    openrouter: {
+      baseUrl: configData.OpenRouter?.base_url || 'https://openrouter.ai/api/v1',
+      apiKey: configData.OpenRouter?.api_key || '',
+      model: configData.OpenRouter?.model || 'mistralai/mistral-7b-instruct:free',
+      embeddingModel: configData.OpenRouter?.embedding_model || 'text-embedding-3-small',
+      maxTokens: parseInt(configData.OpenRouter?.max_tokens || '4000'),
+    },
+    zai: {
+      baseUrl: configData.ZAI?.base_url || 'https://api.zai.com',
+      apiKey: configData.ZAI?.api_key || '',
+      model: configData.ZAI?.model || 'glm-4.5-air',
+      embeddingModel: configData.ZAI?.embedding_model || 'glm-4.5-air',
+      maxTokens: parseInt(configData.ZAI?.max_tokens || '4000'),
+    },
   },
   upload: {
-    maxFileSize: parseInt(process.env.MAX_FILE_SIZE || '10485760'), // 10MB по умолчанию
-    allowedTypes: (process.env.ALLOWED_FILE_TYPES || 'pdf,doc,docx,txt,html,md').split(','),
-    uploadPath: process.env.UPLOAD_DIR || './uploads',
+    maxFileSize: parseInt(configData.Upload?.max_file_size || '10485760'),
+    allowedTypes: (configData.Upload?.allowed_file_types || 'pdf,doc,docx,txt,html,md').split(','),
+    uploadPath: configData.Upload?.upload_dir || './uploads',
   },
   processing: {
-    maxConcurrentJobs: parseInt(process.env.MAX_CONCURRENT_JOBS || '3'),
-    jobTimeout: parseInt(process.env.JOB_TIMEOUT || '300000'), // 5 минут по умолчанию
+    maxConcurrentJobs: parseInt(configData.Processing?.max_concurrent_jobs || '3'),
+    jobTimeout: parseInt(configData.Processing?.job_timeout || '300000'),
+    chunkSize: parseInt(configData.Processing?.chunk_size || '1200'),
+    chunkOverlap: parseInt(configData.Processing?.chunk_overlap || '200'),
   },
 };
