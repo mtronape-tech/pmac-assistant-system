@@ -667,7 +667,7 @@ export class VectraService {
     }
   }
 
-
+  // Новый метод для поиска с расширенными опциями
   async searchWithOptions(query: string, options: {
     limit?: number;
     threshold?: number;

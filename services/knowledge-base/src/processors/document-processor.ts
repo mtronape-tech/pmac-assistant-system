@@ -161,7 +161,7 @@ export class DocumentProcessingManager {
 
   private registerDefaultProcessors(): void {
     // Будем регистрировать процессоры по мере их создания
-    logger.info('Менеджер обработки документов инициализирован');
+    logger.info('Document processing manager initialized');
   }
 
   registerProcessor(mimeType: string, processor: BaseDocumentProcessor): void {
@@ -230,12 +230,7 @@ export class DocumentProcessingManager {
       await this.updateJobStep(job, 'text_chunking', 'processing');
       
       let textChunks = this.chunker.chunkText(text);
-      // Ограничиваем количество чанков, чтобы не зависать на длинных документах
-      const maxChunks = parseInt(process.env.MAX_CHUNKS || '500');
-      if (textChunks.length > maxChunks) {
-        logger.warn(`Количество чанков (${textChunks.length}) превышает лимит ${maxChunks}. Усечем для стабильности.`);
-        textChunks = textChunks.slice(0, maxChunks);
-      }
+      logger.info(`Текст разбит на ${textChunks.length} чанков для документа ${originalFilename}`);
       
       await this.updateJobStep(job, 'text_chunking', 'completed', { 
         chunksCount: textChunks.length 
@@ -244,31 +239,101 @@ export class DocumentProcessingManager {
 
       // Шаг 3: Сохранение чанков в хранилище с эмбеддингами
       await this.updateJobStep(job, 'metadata_extraction', 'processing');
+      logger.info(`Начинаем генерацию эмбеддингов для ${textChunks.length} чанков документа ${originalFilename}`);
+
+      // Счетчики для отслеживания качества обработки
+      let successfulEmbeddings = 0;
+      let failedEmbeddings = 0;
+      let chunksWithoutEmbeddings = 0;
 
       try {
-        const batchSize = 32;
-        for (let start = 0; start < textChunks.length; start += batchSize) {
-          const end = Math.min(start + batchSize, textChunks.length);
-          const batch = textChunks.slice(start, end);
-          // Генерация эмбеддингов батчем (с фолбэком внутри AIService)
-          const embeddings = await this.ai.generateBatchEmbeddings(batch.map(b => b.content));
-          for (let i = 0; i < batch.length; i++) {
-            const globalIndex = start + i;
-            const ch = batch[i];
+        // AI сервис доступен, генерируем эмбеддинги для всех чанков
+        logger.info(`AI сервис доступен, генерируем эмбеддинги для ${textChunks.length} чанков`);
+        
+        // Генерируем эмбеддинги для всех чанков с улучшенной обработкой ошибок
+        for (let i = 0; i < textChunks.length; i++) {
+          const ch = textChunks[i];
+          
+          try {
+            // Генерируем эмбеддинг для чанка
+            const embeddingResponse = await this.ai.generateEmbedding({
+              text: ch.content,
+              model: 'text-embedding-3-small'
+            });
+            
             const chunkObj = {
-              id: `${job.documentId}_chunk_${globalIndex}`,
+              id: `${job.documentId}_chunk_${i}`,
               documentId: job.documentId,
               content: ch.content,
               pageNumber: undefined as number | undefined,
-              chunkIndex: globalIndex,
+              chunkIndex: i,
               tokens: ch.metadata?.tokenCount as number | undefined,
+              embedding: embeddingResponse.embedding,
             };
-            (chunkObj as any).embedding = embeddings[i]?.embedding || undefined;
+            
             await this.storage.addDocumentChunk(chunkObj as any);
+            successfulEmbeddings++;
+            
+            // Обновляем прогресс
+            const progress = 70 + (i / textChunks.length) * 20;
+            job.progress = Math.round(progress);
+            
+            // Уменьшаем задержку между запросами для стабильности
+            if (i % 5 === 0 && i > 0) {
+              await new Promise(resolve => setTimeout(resolve, 50));
+            }
+            
+          } catch (error) {
+            logger.warn(`Не удалось сгенерировать эмбеддинг для чанка ${i} (${ch.content.substring(0, 50)}...):`, error);
+            failedEmbeddings++;
+            
+            // Сохраняем чанк без эмбеддинга, но с пометкой об ошибке
+            const chunkObj = {
+              id: `${job.documentId}_chunk_${i}`,
+              documentId: job.documentId,
+              content: ch.content,
+              pageNumber: undefined as number | undefined,
+              chunkIndex: i,
+              tokens: ch.metadata?.tokenCount as number | undefined,
+              // Добавляем пометку об ошибке эмбеддинга
+              embeddingError: error instanceof Error ? error.message : 'Unknown error'
+            };
+            
+            await this.storage.addDocumentChunk(chunkObj as any);
+            chunksWithoutEmbeddings++;
+            
+            // Небольшая пауза после ошибки
+            await new Promise(resolve => setTimeout(resolve, 100));
           }
         }
+        
+        logger.info(`Обработка эмбеддингов завершена для документа ${originalFilename}. Успешно: ${successfulEmbeddings}, Ошибок: ${failedEmbeddings}, Без эмбеддингов: ${chunksWithoutEmbeddings}`);
+        
+        // Проверяем, что все чанки сохранены
+        if (successfulEmbeddings + chunksWithoutEmbeddings !== textChunks.length) {
+          logger.warn(`Несоответствие в количестве чанков: ожидалось ${textChunks.length}, сохранено ${successfulEmbeddings + chunksWithoutEmbeddings}`);
+        }
+        
       } catch (e) {
-        logger.warn('Не удалось сохранить чанки/эмбеддинги:', e);
+        logger.error('Критическая ошибка при генерации эмбеддингов:', e);
+        
+        // В случае критической ошибки сохраняем все чанки без эмбеддингов
+        for (let i = 0; i < textChunks.length; i++) {
+          const ch = textChunks[i];
+          const chunkObj = {
+            id: `${job.documentId}_chunk_${i}`,
+            documentId: job.documentId,
+            content: ch.content,
+            pageNumber: undefined as number | undefined,
+            chunkIndex: i,
+            tokens: ch.metadata?.tokenCount as number | undefined,
+            embeddingError: 'Critical processing error'
+          };
+          await this.storage.addDocumentChunk(chunkObj as any);
+          chunksWithoutEmbeddings++;
+        }
+        
+        logger.info(`Сохранено ${textChunks.length} чанков без эмбеддингов из-за критической ошибки`);
       }
 
       await this.updateJobStep(job, 'metadata_extraction', 'completed');
@@ -279,21 +344,62 @@ export class DocumentProcessingManager {
       
       const qualityScore = this.assessContentQuality(text, textChunks);
       
+      // Рассчитываем качество обработки на основе эмбеддингов
+      const totalChunks = textChunks.length;
+      const processedChunks = successfulEmbeddings;
+      const embeddingErrors = failedEmbeddings;
+      const processingQuality = totalChunks > 0 ? Math.round((processedChunks / totalChunks) * 100) : 0;
+      
+      // Улучшенная логика определения статуса
+      let finalStatus: 'completed' | 'partially_completed' | 'failed' = 'completed';
+      
+      if (processingQuality < 100) {
+        if (processingQuality >= 90) {
+          finalStatus = 'completed'; // Если качество >= 90%, считаем документ полностью обработанным
+          logger.info(`Документ ${originalFilename} обработан с высоким качеством: ${processingQuality}%`);
+        } else if (processingQuality >= 70) {
+          finalStatus = 'partially_completed';
+          logger.warn(`Документ ${originalFilename} обработан частично. Качество: ${processingQuality}%`);
+        } else {
+          finalStatus = 'failed';
+          logger.error(`Документ ${originalFilename} обработан с критическими ошибками. Качество: ${processingQuality}%`);
+        }
+      }
+
+      // Проверяем, что все чанки сохранены
+      if (successfulEmbeddings + chunksWithoutEmbeddings !== totalChunks) {
+        logger.error(`Критическая ошибка: не все чанки сохранены! Ожидалось: ${totalChunks}, Сохранено: ${successfulEmbeddings + chunksWithoutEmbeddings}`);
+        finalStatus = 'failed';
+      }
+      
       await this.updateJobStep(job, 'quality_assessment', 'completed', { 
-        qualityScore 
+        qualityScore,
+        totalChunks,
+        processedChunks,
+        embeddingErrors,
+        processingQuality,
+        chunksWithoutEmbeddings
       });
 
-      job.status = 'completed';
+      job.status = finalStatus;
       job.progress = 100;
       job.completedAt = new Date();
 
-      logger.info(`Обработка документа ${originalFilename} завершена успешно`);
+      logger.info(`Обработка документа ${originalFilename} завершена. Статус: ${finalStatus}, Качество: ${processingQuality}%, Job ID: ${job.id}, Document ID: ${job.documentId}`);
 
-      // Обновляем статус документа как completed
+      // Обновляем статус документа с информацией о качестве обработки
       try {
-        await this.storage.updateDocumentStatus(job.documentId, 'completed');
+        await this.storage.updateDocumentStatus(job.documentId, finalStatus, {
+          totalChunks,
+          processedChunks,
+          embeddingErrors,
+          processingQuality,
+          chunksWithoutEmbeddings
+        });
+        logger.info(`Статус документа ${job.documentId} обновлен на '${finalStatus}' с качеством ${processingQuality}%`);
       } catch (e) {
-        logger.warn('Не удалось обновить статус документа:', e);
+        logger.error('Не удалось обновить статус документа:', e);
+        throw e; // Пробрасываем ошибку, чтобы задача не считалась завершенной
       }
 
     } catch (error) {
@@ -484,6 +590,25 @@ export class DocumentProcessingManager {
       currentStep.completedAt = new Date();
     }
 
+    return true;
+  }
+
+  removeJob(jobId: string): boolean {
+    const job = this.activeJobs.get(jobId);
+    if (!job) {
+      return false;
+    }
+
+    // Сначала отменяем задачу, если она активна
+    if (job.status === 'processing' || job.status === 'queued') {
+      job.status = 'cancelled';
+      job.completedAt = new Date();
+    }
+
+    // Удаляем задачу из активных
+    this.activeJobs.delete(jobId);
+    logger.info(`Задача ${jobId} удалена из менеджера обработки`);
+    
     return true;
   }
 

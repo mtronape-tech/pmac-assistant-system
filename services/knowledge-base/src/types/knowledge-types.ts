@@ -9,9 +9,15 @@ export interface Document {
   author?: string;
   category?: string;
   tags: string[];
-  status: 'uploaded' | 'processing' | 'completed' | 'failed';
+  status: 'uploaded' | 'processing' | 'completed' | 'failed' | 'partially_completed';
   type: DocumentType | 'document';
   description?: string;
+  // Новые поля для отслеживания качества обработки
+  totalChunks?: number;
+  processedChunks?: number;
+  embeddingErrors?: number;
+  processingQuality?: number; // Процент успешно обработанных чанков (0-100)
+  chunksWithoutEmbeddings?: number; // Количество чанков без эмбеддингов
 }
 
 export interface DocumentChunk {
@@ -22,8 +28,15 @@ export interface DocumentChunk {
   chunkIndex?: number;
   tokens?: number;
   embedding?: number[];
+  embeddingError?: string; // Ошибка при генерации эмбеддинга
   metadata?: ChunkMetadata;
   createdAt?: Date;
+  // Поля для информации о качестве обработки (для совместимости)
+  totalChunks?: number;
+  processedChunks?: number;
+  embeddingErrors?: number;
+  processingQuality?: number;
+  chunksWithoutEmbeddings?: number;
 }
 
 export interface DocumentMetadata {
@@ -87,7 +100,8 @@ export type JobStatus =
   | 'processing'
   | 'completed'
   | 'failed'
-  | 'cancelled';
+  | 'cancelled'
+  | 'partially_completed';
 
 export interface ProcessingStep {
   name: string;
@@ -178,6 +192,24 @@ export interface DocumentStats {
   averageChunksPerDocument: number;
   totalStorageSize: number;
   lastUpdated: Date;
+  // Новая информация о качестве обработки
+  documentsByStatus: {
+    completed: number;
+    partially_completed: number;
+    failed: number;
+    processing: number;
+    uploaded: number;
+  };
+  totalEmbeddingErrors: number;
+  totalChunksWithoutEmbeddings: number; // Общее количество чанков без эмбеддингов
+  averageProcessingQuality: number;
+  documentsWithQuality: number;
+  qualityBreakdown: {
+    excellent: number;
+    good: number;
+    fair: number;
+    poor: number;
+  };
 }
 
 export interface ProcessingStats {

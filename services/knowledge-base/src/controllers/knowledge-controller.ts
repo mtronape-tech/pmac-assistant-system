@@ -1,5 +1,7 @@
 import { Request, Response } from 'express';
 import { z } from 'zod';
+import * as path from 'path';
+import * as fs from 'fs';
 import { logger } from '../utils/logger.js';
 import { VectraService } from '../services/vectra-service.js';
 import { AIService } from '../services/openai-service.js';
@@ -7,6 +9,7 @@ import { DocumentProcessingManager } from '../processors/document-processor.js';
 import { TextProcessor } from '../processors/text-processor.js';
 import { PDFProcessor } from '../processors/pdf-processor.js';
 import { HTMLProcessor } from '../processors/html-processor.js';
+import { config } from '../config/index.js';
 import type { 
   SearchQuery, 
   Document, 
@@ -60,7 +63,7 @@ export class KnowledgeController {
     this.processingManager.registerProcessor('application/pdf', new PDFProcessor());
     this.processingManager.registerProcessor('text/html', new HTMLProcessor());
     
-    logger.info('Процессоры документов зарегистрированы');
+    logger.info('Document processors registered');
   }
 
   // Поиск документов
@@ -76,10 +79,7 @@ export class KnowledgeController {
       });
       
       // Выполняем поиск в Vectra
-      const searchResults = await this.vectraService.searchDocuments({
-        query: searchData.query,
-        text: searchData.query,
-        embedding: embeddingResponse.embedding,
+      const searchResults = await this.vectraService.searchDocuments(searchData.query, {
         limit: searchData.limit,
         threshold: searchData.threshold
       });
@@ -128,10 +128,7 @@ export class KnowledgeController {
         text: queryData.query,
       });
       
-      const searchResults = await this.vectraService.searchDocuments({
-        query: queryData.query,
-        text: queryData.query,
-        embedding: embeddingResponse.embedding,
+      const searchResults = await this.vectraService.searchDocuments(queryData.query, {
         limit: queryData.maxSources,
         threshold: 0.6
       });
@@ -282,7 +279,7 @@ export class KnowledgeController {
         return;
       }
 
-      // Получаем документы из Vectra
+            // Получаем документы из Vectra
       const allDocuments = await this.vectraService.getAllDocuments();
       
       // Применяем фильтры
@@ -292,24 +289,70 @@ export class KnowledgeController {
         documents = documents.filter(doc => String(doc.category || '') === String(category));
       }
       
-             if (search) {
-         const searchLower = String(search).toLowerCase();
-         documents = documents.filter(doc => 
-           String(doc.title).toLowerCase().includes(searchLower)
-         );
-       }
+      if (search) {
+        const searchLower = String(search).toLowerCase();
+        documents = documents.filter(doc => 
+          String(doc.title).toLowerCase().includes(searchLower)
+        );
+      }
+      
+      // Добавляем информацию о прогрессе обработки для документов в статусе "processing"
+      const documentsWithProgress = await Promise.all(
+        documents.map(async (doc) => {
+          if (doc.status === 'processing') {
+            // Ищем активную задачу обработки для этого документа
+            const allJobs = this.processingManager.getAllJobs();
+            logger.info(`Всего задач обработки: ${allJobs.length}`);
+            logger.info(`Задачи: ${JSON.stringify(allJobs.map(j => ({ id: j.id, documentId: j.documentId, status: j.status, progress: j.progress })))}`);
+            
+            const activeJob = allJobs.find(job => 
+              job.documentId === doc.id && job.status === 'processing'
+            );
+            
+            if (activeJob) {
+              logger.info(`Найдена активная задача для документа ${doc.id}: ${activeJob.id}, прогресс: ${activeJob.progress}%`);
+              return {
+                ...doc,
+                processingProgress: activeJob.progress,
+                processingStep: this.getCurrentProcessingStep(activeJob),
+                processingJobId: activeJob.id,
+                estimatedTimeRemaining: this.estimateTimeRemaining(activeJob)
+              };
+            } else {
+              // Проверяем, есть ли завершенная задача для этого документа
+              const completedJob = allJobs.find(job => 
+                job.documentId === doc.id && job.status === 'completed'
+              );
+              
+              if (completedJob) {
+                logger.info(`Найдена завершенная задача для документа ${doc.id}: ${completedJob.id}. Обновляем статус документа.`);
+                // Обновляем статус документа на completed
+                try {
+                  await this.vectraService.updateDocumentStatus(doc.id, 'completed');
+                  return { ...doc, status: 'completed' };
+                } catch (e) {
+                  logger.error(`Ошибка обновления статуса документа ${doc.id}:`, e);
+                }
+              } else {
+                logger.warn(`Не найдено ни активной, ни завершенной задачи для документа ${doc.id}. Статус: ${doc.status}`);
+              }
+            }
+          }
+          return doc;
+        })
+      );
       
       // Применяем пагинацию
       const startIndex = Number(offset);
       const endIndex = startIndex + Number(limit);
-      documents = documents.slice(startIndex, endIndex);
+      const paginatedDocuments = documentsWithProgress.slice(startIndex, endIndex);
       
       res.json({
         success: true,
         data: {
-          documents,
-          totalCount: documents.length,
-          hasMore: documents.length === Number(limit)
+          documents: paginatedDocuments,
+          totalCount: documentsWithProgress.length,
+          hasMore: paginatedDocuments.length === Number(limit)
         }
       });
       
@@ -348,6 +391,71 @@ export class KnowledgeController {
       res.status(500).json({
         success: false,
         error: 'Ошибка получения статуса',
+        details: error instanceof Error ? error.message : 'Неизвестная ошибка',
+      });
+    }
+  };
+
+  // Получение статусов обработки для всех документов
+  getProcessingStatuses = async (req: Request, res: Response): Promise<void> => {
+    try {
+      const { documentIds } = req.query;
+      
+      if (!documentIds || typeof documentIds !== 'string') {
+        res.status(400).json({
+          success: false,
+          error: 'Необходимо указать documentIds',
+        });
+        return;
+      }
+      
+      const ids = documentIds.split(',');
+      const allJobs = this.processingManager.getAllJobs();
+      const statuses: any[] = [];
+      
+      for (const documentId of ids) {
+        const activeJob = allJobs.find(job => 
+          job.documentId === documentId && job.status === 'processing'
+        );
+        
+        if (activeJob) {
+          statuses.push({
+            documentId,
+            processingProgress: activeJob.progress,
+            processingStep: this.getCurrentProcessingStep(activeJob),
+            processingJobId: activeJob.id,
+            estimatedTimeRemaining: this.estimateTimeRemaining(activeJob),
+            status: 'processing'
+          });
+        } else {
+          // Проверяем, завершена ли обработка
+          const completedJob = allJobs.find(job => 
+            job.documentId === documentId && job.status === 'completed'
+          );
+          
+          if (completedJob) {
+            statuses.push({
+              documentId,
+              processingProgress: 100,
+              processingStep: 'Обработка завершена',
+              processingJobId: completedJob.id,
+              estimatedTimeRemaining: '0 мин',
+              status: 'completed'
+            });
+          }
+        }
+      }
+      
+      res.json({
+        success: true,
+        data: statuses,
+      });
+      
+    } catch (error) {
+      logger.error('Ошибка получения статусов обработки:', error);
+      res.status(500).json({
+        success: false,
+        error: 'Ошибка получения статусов',
         details: error instanceof Error ? error.message : 'Неизвестная ошибка',
       });
     }
@@ -399,6 +507,54 @@ export class KnowledgeController {
     }
   };
 
+  // Обновление документа
+  updateDocument = async (req: Request, res: Response): Promise<void> => {
+    try {
+      const { documentId } = req.params;
+      const { title, author, category, description, tags } = req.body;
+      
+      logger.info(`Обновление документа: ${documentId}`);
+      
+      // Получаем текущий документ
+      const result = await this.vectraService.getDocument(documentId);
+      if (!result.success || !result.data) {
+        res.status(404).json({
+          success: false,
+          error: 'Документ не найден',
+        });
+        return;
+      }
+      
+      const currentDoc = result.data;
+      
+      // Обновляем документ
+      const updatedDoc = {
+        ...currentDoc,
+        title: this.fixEncoding(title || currentDoc.title),
+        author: this.fixEncoding(author || currentDoc.author),
+        category: category || currentDoc.category,
+        description: this.fixEncoding(description || currentDoc.description),
+        tags: tags || currentDoc.tags,
+      };
+      
+      await this.vectraService.updateDocument(documentId, updatedDoc);
+      
+      res.json({
+        success: true,
+        message: 'Документ обновлен успешно',
+        data: updatedDoc,
+      });
+      
+    } catch (error) {
+      logger.error('Ошибка обновления документа:', error);
+      res.status(500).json({
+        success: false,
+        error: 'Ошибка обновления документа',
+        details: error instanceof Error ? error.message : 'Неизвестная ошибка',
+      });
+    }
+  };
+
   // Удаление документа
   deleteDocument = async (req: Request, res: Response): Promise<void> => {
     try {
@@ -406,7 +562,16 @@ export class KnowledgeController {
       
       logger.info(`Удаление документа: ${documentId}`);
       
+      // Удаляем документ из Vectra
       await this.vectraService.deleteDocument(documentId);
+      
+      // Удаляем связанную задачу обработки из processingManager
+      const allJobs = this.processingManager.getAllJobs();
+      const jobToRemove = allJobs.find(job => job.documentId === documentId);
+      if (jobToRemove) {
+        logger.info(`Удаление задачи обработки для документа: ${documentId}`);
+        this.processingManager.removeJob(jobToRemove.id);
+      }
       
       res.json({
         success: true,
@@ -419,6 +584,54 @@ export class KnowledgeController {
         success: false,
         error: 'Ошибка удаления документа',
         details: error instanceof Error ? error.message : 'Неизвестная ошибка',
+      });
+    }
+  };
+
+  // Скачивание документа
+  downloadDocument = async (req: Request, res: Response): Promise<void> => {
+    try {
+      const { documentId } = req.params;
+      
+      logger.info(`Скачивание документа: ${documentId}`);
+      
+      const result = await this.vectraService.getDocument(documentId);
+      
+      if (result.success && result.data) {
+        const document = result.data;
+        
+        // Ищем файл в папке uploads по ID документа
+        const uploadDir = config.upload.uploadPath;
+        const files = fs.readdirSync(uploadDir);
+        const targetFile = files.find(file => file.includes(documentId));
+        
+        if (targetFile) {
+          const filePath = path.join(uploadDir, targetFile);
+          const originalFilename = document.filename || targetFile;
+          
+          logger.info(`Найден файл для скачивания: ${filePath}`);
+          res.download(filePath, originalFilename);
+        } else {
+          logger.error(`Файл не найден для документа ${documentId}`);
+          res.status(404).json({
+            success: false,
+            error: 'Файл не найден на диске',
+            details: `Файл для документа ${documentId} не найден в папке uploads`
+          });
+        }
+      } else {
+        res.status(404).json({
+          success: false,
+          error: 'Документ не найден',
+          details: result.error
+        });
+      }
+    } catch (error) {
+      logger.error('Ошибка скачивания документа:', error);
+      res.status(500).json({
+        success: false,
+        error: 'Ошибка скачивания документа',
+        details: error instanceof Error ? error.message : 'Неизвестная ошибка'
       });
     }
   };
@@ -454,6 +667,24 @@ export class KnowledgeController {
           Math.round(vectraStats.totalChunks / vectraStats.totalDocuments) : 0,
         totalStorageSize: vectraStats.totalStorageSize || 0,
         lastUpdated: new Date(),
+        // Новая информация о качестве обработки
+        documentsByStatus: vectraStats.documentsByStatus || {
+          completed: 0,
+          partially_completed: 0,
+          failed: 0,
+          processing: 0,
+          uploaded: 0
+        },
+        totalEmbeddingErrors: vectraStats.totalEmbeddingErrors || 0,
+        totalChunksWithoutEmbeddings: vectraStats.totalChunksWithoutEmbeddings || 0,
+        averageProcessingQuality: vectraStats.averageProcessingQuality || 0,
+        documentsWithQuality: vectraStats.documentsWithQuality || 0,
+        qualityBreakdown: vectraStats.qualityBreakdown || {
+          excellent: 0,
+          good: 0,
+          fair: 0,
+          poor: 0,
+        }
       };
       
       // Определяем типы документов по названию и категории
@@ -544,6 +775,8 @@ export class KnowledgeController {
     }
   };
 
+
+
   private getProcessingStats(): ProcessingStats {
     const jobs = this.processingManager.getAllJobs();
     
@@ -601,6 +834,50 @@ export class KnowledgeController {
     } catch (error) {
       logger.warn('Ошибка исправления кодировки в контроллере:', error);
       return text; // Возвращаем исходный текст при ошибке
+    }
+  }
+
+  private getCurrentProcessingStep(job: any): string {
+    const steps = job.steps || [];
+    const currentStep = steps.find((step: any) => step.status === 'processing');
+    
+    if (currentStep) {
+      // Для этапа генерации эмбеддингов добавляем детальную информацию
+      if (currentStep.name === 'metadata_extraction' && job.progress > 70) {
+        const progressInStep = Math.round((job.progress - 70) / 20 * 100); // 70-90% это этап эмбеддингов
+        return `metadata_extraction_${progressInStep}`;
+      }
+      
+      // Возвращаем короткий идентификатор этапа для фронтенда
+      return currentStep.name;
+    }
+    
+    return 'preparation';
+  }
+
+  private estimateTimeRemaining(job: any): string {
+    if (!job.startedAt || job.progress === 0) {
+      return 'Оценка времени...';
+    }
+    
+    const elapsed = Date.now() - new Date(job.startedAt).getTime();
+    const progress = job.progress || 0;
+    
+    if (progress === 0) {
+      return 'Оценка времени...';
+    }
+    
+    const estimatedTotal = elapsed / (progress / 100);
+    const remaining = estimatedTotal - elapsed;
+    
+    if (remaining < 60000) { // меньше минуты
+      return 'Менее минуты';
+    } else if (remaining < 3600000) { // меньше часа
+      const minutes = Math.ceil(remaining / 60000);
+      return `${minutes} мин`;
+    } else {
+      const hours = Math.ceil(remaining / 3600000);
+      return `${hours} ч`;
     }
   }
 }

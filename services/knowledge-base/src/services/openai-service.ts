@@ -21,7 +21,7 @@ export class AIService {
     try {
       if (this.provider === 'openrouter') {
         if (!config.ai.openrouter.apiKey) {
-          logger.warn('OpenRouter API ключ не настроен, AI функции будут отключены');
+          logger.warn('OpenRouter API key not configured, AI functions will be disabled');
           this.client = null as any;
         } else {
           this.client = new OpenAI({
@@ -37,11 +37,11 @@ export class AIService {
           this.embeddingModel = config.ai.openrouter.embeddingModel;
           this.maxTokens = config.ai.openrouter.maxTokens;
           
-          logger.info(`Инициализирован AIService с провайдером OpenRouter, модель: ${this.model}`);
+          logger.info(`AIService initialized with OpenRouter provider, model: ${this.model}`);
         }
       } else if (this.provider === 'zai') {
         if (!config.ai.zai.apiKey) {
-          logger.warn('Z.AI API ключ не настроен, AI функции будут отключены');
+          logger.warn('Z.AI API key not configured, AI functions will be disabled');
           this.client = null as any;
         } else {
           this.client = new OpenAI({
@@ -56,7 +56,7 @@ export class AIService {
           this.embeddingModel = config.ai.zai.embeddingModel;
           this.maxTokens = config.ai.zai.maxTokens;
           
-          logger.info(`Инициализирован AIService с провайдером Z.AI, модель: ${this.model}`);
+          logger.info(`AIService initialized with Z.AI provider, model: ${this.model}`);
         }
       } else {
         if (!config.ai.openai.apiKey) {
@@ -83,44 +83,74 @@ export class AIService {
   async generateEmbedding(request: EmbeddingRequest): Promise<EmbeddingResponse> {
     try {
       if (!this.client) {
-        logger.warn('AI клиент не инициализирован, используем локальный эмбеддинг');
+        logger.warn('AI клиент не инициализирован, используем улучшенный локальный эмбеддинг');
         return {
-          embedding: this.generateLocalEmbedding(request.text, 1536),
+          embedding: this.generateImprovedLocalEmbedding(request.text, 1536),
           tokensUsed: 0,
           model: request.model || this.embeddingModel,
         };
       }
 
-      const response = await this.client.embeddings.create({
-        model: request.model || this.embeddingModel,
-        input: request.text,
-      });
+      // Добавляем повторные попытки для стабильности
+      let lastError: any;
+      const maxRetries = 3;
+      
+      for (let attempt = 1; attempt <= maxRetries; attempt++) {
+        try {
+          const response = await this.client.embeddings.create({
+            model: this.embeddingModel,
+            input: request.text,
+          });
 
-      // Проверяем, что response.data существует и не пустой
-      if (!response.data || response.data.length === 0) {
-        logger.warn('Пустой ответ от AI сервиса, используем локальный эмбеддинг');
-        return {
-          embedding: this.generateLocalEmbedding(request.text, 1536),
-          tokensUsed: 0,
-          model: request.model || this.embeddingModel,
-        };
+          if (!response.data || response.data.length === 0) {
+            logger.warn(`Попытка ${attempt}/${maxRetries}: Пустой ответ от AI сервиса`);
+            if (attempt === maxRetries) {
+              logger.warn('Все попытки исчерпаны, используем улучшенный локальный эмбеддинг');
+              return {
+                embedding: this.generateImprovedLocalEmbedding(request.text, 1536),
+                tokensUsed: 0,
+                model: request.model || this.embeddingModel,
+              };
+            }
+            // Пауза перед повторной попыткой
+            await new Promise(resolve => setTimeout(resolve, 1000 * attempt));
+            continue;
+          }
+
+          const embedding = response.data[0].embedding;
+          const tokensUsed = response.usage?.total_tokens || 0;
+
+          logger.debug(`Сгенерирован эмбеддинг для текста длиной ${request.text.length} символов, использовано ${tokensUsed} токенов (${this.provider})`);
+
+          return {
+            embedding,
+            tokensUsed,
+            model: request.model || this.embeddingModel,
+          };
+        } catch (error) {
+          lastError = error;
+          logger.warn(`Попытка ${attempt}/${maxRetries} не удалась:`, error);
+          
+          if (attempt < maxRetries) {
+            // Пауза перед повторной попыткой (экспоненциальная задержка)
+            const delay = Math.min(1000 * Math.pow(2, attempt - 1), 5000);
+            await new Promise(resolve => setTimeout(resolve, delay));
+          }
+        }
       }
 
-      const embedding = response.data[0].embedding;
-      const tokensUsed = response.usage?.total_tokens || 0;
-
-      logger.debug(`Сгенерирован эмбеддинг для текста длиной ${request.text.length} символов, использовано ${tokensUsed} токенов (${this.provider})`);
-
+      // Все попытки исчерпаны
+      logger.error('Все попытки генерации эмбеддинга исчерпаны, используем улучшенный локальный эмбеддинг');
       return {
-        embedding,
-        tokensUsed,
+        embedding: this.generateImprovedLocalEmbedding(request.text, 1536),
+        tokensUsed: 0,
         model: request.model || this.embeddingModel,
       };
     } catch (error) {
-      logger.error('Ошибка генерации эмбеддинга:', error);
-      // Возвращаем локальный эмбеддинг при ошибке
+      logger.error('Критическая ошибка генерации эмбеддинга:', error);
+      // Возвращаем улучшенный локальный эмбеддинг при ошибке
       return {
-        embedding: this.generateLocalEmbedding(request.text, 1536),
+        embedding: this.generateImprovedLocalEmbedding(request.text, 1536),
         tokensUsed: 0,
         model: request.model || this.embeddingModel,
       };
@@ -130,9 +160,9 @@ export class AIService {
   async generateBatchEmbeddings(texts: string[]): Promise<EmbeddingResponse[]> {
     try {
       if (!this.client) {
-        logger.warn('AI клиент не инициализирован, используем локальные эмбеддинги');
+        logger.warn('AI клиент не инициализирован, используем улучшенные локальные эмбеддинги');
         return texts.map(t => ({
-          embedding: this.generateLocalEmbedding(t, 1536),
+          embedding: this.generateImprovedLocalEmbedding(t, 1536),
           tokensUsed: 0,
           model: this.embeddingModel,
         }));
@@ -144,37 +174,73 @@ export class AIService {
       for (let i = 0; i < texts.length; i += batchSize) {
         const batch = texts.slice(i, i + batchSize);
         
-        const response = await this.client.embeddings.create({
-          model: this.embeddingModel,
-          input: batch,
-        });
+        // Добавляем повторные попытки для батча
+        let batchResults: EmbeddingResponse[] = [];
+        const maxRetries = 2;
+        
+        for (let attempt = 1; attempt <= maxRetries; attempt++) {
+          try {
+            const response = await this.client.embeddings.create({
+              model: this.embeddingModel,
+              input: batch,
+            });
 
-        let batchResults: EmbeddingResponse[];
-        if (!response.data || response.data.length === 0) {
-          logger.warn('Пустой ответ от AI сервиса для батча, используем локальные эмбеддинги');
-          batchResults = batch.map(text => ({
-            embedding: this.generateLocalEmbedding(text, 1536),
-            tokensUsed: 0,
-            model: this.embeddingModel,
-          }));
-        } else {
-          batchResults = response.data.map((item, index) => ({
-            embedding: item.embedding,
-            tokensUsed: Math.floor((response.usage?.total_tokens || 0) / batch.length),
-            model: this.embeddingModel,
-          }));
+            if (!response.data || response.data.length === 0) {
+              logger.warn(`Попытка ${attempt}/${maxRetries}: Пустой ответ от AI сервиса для батча ${i}-${i + batch.length}`);
+              if (attempt === maxRetries) {
+                logger.warn('Все попытки исчерпаны для батча, используем улучшенные локальные эмбеддинги');
+                batchResults = batch.map(text => ({
+                  embedding: this.generateImprovedLocalEmbedding(text, 1536),
+                  tokensUsed: 0,
+                  model: this.embeddingModel,
+                }));
+              } else {
+                // Пауза перед повторной попыткой
+                await new Promise(resolve => setTimeout(resolve, 1000 * attempt));
+                continue;
+              }
+            } else {
+              batchResults = response.data.map((item, index) => ({
+                embedding: item.embedding,
+                tokensUsed: Math.floor((response.usage?.total_tokens || 0) / batch.length),
+                model: this.embeddingModel,
+              }));
+            }
+            
+            break; // Успешно получили результаты
+          } catch (error) {
+            logger.warn(`Попытка ${attempt}/${maxRetries} для батча ${i}-${i + batch.length} не удалась:`, error);
+            
+            if (attempt === maxRetries) {
+              logger.warn('Все попытки исчерпаны для батча, используем улучшенные локальные эмбеддинги');
+              batchResults = batch.map(text => ({
+                embedding: this.generateImprovedLocalEmbedding(text, 1536),
+                tokensUsed: 0,
+                model: this.embeddingModel,
+              }));
+            } else {
+              // Пауза перед повторной попыткой
+              const delay = Math.min(1000 * Math.pow(2, attempt - 1), 3000);
+              await new Promise(resolve => setTimeout(resolve, delay));
+            }
+          }
         }
 
         results.push(...batchResults);
+        
+        // Пауза между батчами для стабильности
+        if (i + batchSize < texts.length) {
+          await new Promise(resolve => setTimeout(resolve, 200));
+        }
       }
 
       logger.debug(`Сгенерированы эмбеддинги для ${texts.length} текстов`);
       return results;
     } catch (error) {
-      logger.error('Ошибка генерации пакетных эмбеддингов:', error);
-      // Возвращаем пустые эмбеддинги при ошибке
-      return texts.map(() => ({
-        embedding: new Array(1536).fill(0),
+      logger.error('Критическая ошибка генерации пакетных эмбеддингов:', error);
+      // Возвращаем улучшенные локальные эмбеддинги при ошибке
+      return texts.map(text => ({
+        embedding: this.generateImprovedLocalEmbedding(text, 1536),
         tokensUsed: 0,
         model: this.embeddingModel,
       }));
@@ -386,6 +452,70 @@ ${content.substring(0, 8000)}${content.length > 8000 ? '...' : ''}
     return vec;
   }
 
+  private generateImprovedLocalEmbedding(text: string, dimensions: number): number[] {
+    // Улучшенный алгоритм генерации локальных эмбеддингов
+    // Используем TF-IDF подход для лучшего семантического представления
+    
+    // Нормализуем текст
+    const normalizedText = text.toLowerCase()
+      .replace(/[^\w\s]/g, ' ')
+      .replace(/\s+/g, ' ')
+      .trim();
+    
+    // Разбиваем на слова
+    const words = normalizedText.split(' ').filter(word => word.length > 2);
+    
+    // Создаем вектор на основе частоты слов
+    const wordFreq: { [key: string]: number } = {};
+    words.forEach(word => {
+      wordFreq[word] = (wordFreq[word] || 0) + 1;
+    });
+    
+    // Генерируем эмбеддинг на основе частоты слов
+    const embedding = new Array(dimensions).fill(0);
+    
+    // Используем хеш текста как seed для генератора
+    const hash = this.simpleHash(text);
+    
+    // Заполняем эмбеддинг на основе частоты слов
+    Object.entries(wordFreq).forEach(([word, freq], index) => {
+      const wordHash = this.simpleHash(word);
+      const position = (wordHash + hash + index) % dimensions;
+      
+      // Нормализуем частоту
+      const normalizedFreq = Math.min(freq / words.length, 1.0);
+      
+      // Заполняем несколько позиций вокруг вычисленной позиции
+      for (let i = 0; i < 3; i++) {
+        const pos = (position + i) % dimensions;
+        embedding[pos] += normalizedFreq * 0.1;
+      }
+    });
+    
+    // Нормализуем эмбеддинг
+    const magnitude = Math.sqrt(embedding.reduce((sum, val) => sum + val * val, 0));
+    if (magnitude > 0) {
+      for (let i = 0; i < dimensions; i++) {
+        embedding[i] = embedding[i] / magnitude;
+      }
+    }
+    
+    return embedding;
+  }
+
+  private simpleHash(str: string): number {
+    let hash = 0;
+    if (str.length === 0) return hash;
+    
+    for (let i = 0; i < str.length; i++) {
+      const char = str.charCodeAt(i);
+      hash = ((hash << 5) - hash) + char;
+      hash = hash & hash; // Convert to 32-bit integer
+    }
+    
+    return Math.abs(hash);
+  }
+
   async extractKeywords(content: string): Promise<string[]> {
     try {
       if (!this.client) {
@@ -426,11 +556,11 @@ ${content.substring(0, 4000)}${content.length > 4000 ? '...' : ''}
   async healthCheck(): Promise<boolean> {
     try {
       if (!this.client) {
-        logger.warn('AI клиент не инициализирован - проверьте API ключи в .env файле');
+        logger.warn('AI клиент не инициализирован - проверьте API ключи в config.ini файле');
         return false;
       }
 
-      logger.info(`Проверка подключения к ${this.provider} с моделью ${this.model}`);
+      logger.info(`Checking connection to ${this.provider} with model ${this.model}`);
       
       const response = await this.client.chat.completions.create({
         model: this.model,
@@ -440,7 +570,7 @@ ${content.substring(0, 4000)}${content.length > 4000 ? '...' : ''}
         ],
       });
 
-      logger.info(`✅ ${this.provider} подключение успешно`);
+              logger.info(`${this.provider} connection successful`);
       return response.choices.length > 0;
     } catch (error: any) {
       // Более подробная диагностика ошибок
@@ -451,7 +581,7 @@ ${content.substring(0, 4000)}${content.length > 4000 ? '...' : ''}
           logger.error(`❌ ${this.provider}: Доступ запрещен. Проверьте API ключ или квоты.`);
         }
       } else if (error.status === 401) {
-        logger.error(`❌ ${this.provider}: Неверный API ключ. Проверьте OPENAI_API_KEY или OPENROUTER_API_KEY в .env файле.`);
+        logger.error(`❌ ${this.provider}: Неверный API ключ. Проверьте API ключи в config.ini файле.`);
       } else if (error.status === 429) {
         logger.error(`❌ ${this.provider}: Превышен лимит запросов. Попробуйте позже.`);
       } else if (error.code === 'ENOTFOUND' || error.code === 'ECONNREFUSED') {
@@ -468,8 +598,8 @@ ${content.substring(0, 4000)}${content.length > 4000 ? '...' : ''}
       
       // Предложения по решению
       logger.info('💡 Возможные решения:');
-      logger.info('1. Проверьте API ключ в файле services/knowledge-base/.env');
-      logger.info('2. Смените AI_PROVIDER с openrouter на openai в .env');
+      logger.info('1. Проверьте API ключ в файле services/knowledge-base/config.ini');
+      logger.info('2. Смените AI_PROVIDER в config.ini файле');
       logger.info('3. См. AI_SETUP_GUIDE.md для подробной настройки');
       
       return false;

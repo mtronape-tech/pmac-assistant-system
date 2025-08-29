@@ -33,7 +33,7 @@ try {
 // Отладочная информация
 logger.info('Загружаем конфигурацию...');
 logger.info(`AI_PROVIDER: ${configData.AI?.provider}`);
-logger.info(`OPENROUTER_API_KEY: ${configData.OpenRouter?.api_key ? '***' : 'не установлен'}`);
+      logger.info(`OPENROUTER_API_KEY: ${configData.OpenRouter?.api_key ? '***' : 'not set'}`);
 logger.info(`OPENROUTER_BASE_URL: ${configData.OpenRouter?.base_url}`);
 logger.info(`OPENROUTER_MODEL: ${configData.OpenRouter?.model}`);
 

@@ -60,14 +60,20 @@ const upload = multer({
 
 async function startServer() {
   try {
-    logger.info('🚀 Запуск Knowledge Base Service...');
+    logger.info('Starting Knowledge Base Service...');
 
-    // Инициализируем сервисы
-    logger.info('Инициализация Vectra...');
-    const vectraService = new VectraService();
-    
-    logger.info('Инициализация AI сервиса...');
+    // Инициализируем AI сервис первым
+    logger.info('Initializing AI service...');
     const aiService = new AIService();
+    const aiHealthy = await aiService.healthCheck();
+    
+    if (!aiHealthy) {
+      logger.warn('AI service unavailable, AI functions may not work');
+    }
+
+    // Инициализируем Vectra с AI сервисом
+    logger.info('Initializing Vectra...');
+    const vectraService = new VectraService(aiService);
     
     // Проверяем подключения
     let vectraHealthy = false;
@@ -75,18 +81,12 @@ async function startServer() {
       await vectraService.initialize();
       vectraHealthy = vectraService.isAvailable;
     } catch (error) {
-      logger.warn('⚠️  Vectra недоступен, переходим в режим in-memory:', error);
+      logger.warn('Vectra unavailable, switching to in-memory mode:', error);
       vectraHealthy = false;
     }
     
-    const aiHealthy = await aiService.healthCheck();
-    
     if (!vectraHealthy) {
-      logger.warn('⚠️  Vectra недоступен, используем in-memory хранилище');
-    }
-    
-    if (!aiHealthy) {
-      logger.warn('⚠️  AI сервис недоступен, AI функции могут не работать');
+      logger.warn('Vectra unavailable, using in-memory storage');
     }
 
     // Создаем контроллер
@@ -100,10 +100,14 @@ async function startServer() {
     // Поиск и AI
     app.post('/search', knowledgeController.search);
     app.post('/ask', knowledgeController.askQuestion);
+    
 
     // Управление документами
     app.get('/documents', knowledgeController.getDocuments);
     app.post('/documents/upload', upload.single('file'), knowledgeController.uploadDocument);
+    app.get('/documents/:documentId/download', knowledgeController.downloadDocument);
+    app.put('/documents/:documentId', knowledgeController.updateDocument);
+    app.get('/documents/processing-status', knowledgeController.getProcessingStatuses);
     app.post('/documents/:documentId/process', knowledgeController.processDocument);
     app.delete('/documents/:documentId', knowledgeController.deleteDocument);
 
@@ -123,6 +127,8 @@ async function startServer() {
           health: 'GET /health',
           search: 'POST /search',
           ask: 'POST /ask',
+          'search-advanced': 'POST /search-advanced',
+          'search-detailed': 'POST /search-detailed',
           upload: 'POST /documents/upload',
           delete: 'DELETE /documents/{documentId}',
           processing: 'GET /processing/{jobId}',
@@ -149,6 +155,17 @@ async function startServer() {
               query: 'Как подключить ось к контроллеру PMAC?',
               maxSources: 5,
               includeReasoning: true,
+            },
+          },
+          'search-advanced': {
+            method: 'POST',
+            url: '/search-advanced',
+            body: {
+              query: 'Classic C has two main descendants',
+              limit: 20,
+              reverseOrder: true,
+              prioritizeEnd: true,
+              useChunkIndex: true,
             },
           },
           upload: {
@@ -218,27 +235,27 @@ async function startServer() {
     // Запускаем HTTP сервер
     const server = app.listen(config.server.port, config.server.host, () => {
       logger.info(
-        `🚀 Knowledge Base Service запущен на http://${config.server.host}:${config.server.port}`
+        `Knowledge Base Service started on http://${config.server.host}:${config.server.port}`
       );
-      logger.info(`📋 API документация: http://${config.server.host}:${config.server.port}/api`);
-      logger.info(`💊 Health check: http://${config.server.host}:${config.server.port}/health`);
-      logger.info(`🔍 Поиск: POST http://${config.server.host}:${config.server.port}/search`);
-      logger.info(`🤖 AI вопросы: POST http://${config.server.host}:${config.server.port}/ask`);
-      logger.info(`📄 Загрузка: POST http://${config.server.host}:${config.server.port}/documents/upload`);
+      logger.info(`API Documentation: http://${config.server.host}:${config.server.port}/api`);
+      logger.info(`Health check: http://${config.server.host}:${config.server.port}/health`);
+      logger.info(`Search: POST http://${config.server.host}:${config.server.port}/search`);
+      logger.info(`AI Questions: POST http://${config.server.host}:${config.server.port}/ask`);
+      logger.info(`Upload: POST http://${config.server.host}:${config.server.port}/documents/upload`);
     });
 
     // Graceful shutdown
     const shutdown = async (signal: string) => {
-      logger.info(`Получен сигнал ${signal}, останавливаем сервер...`);
+      logger.info(`Received signal ${signal}, stopping server...`);
       
       server.close(async () => {
-        logger.info('HTTP сервер остановлен');
+        logger.info('HTTP server stopped');
         
         try {
           // Здесь можно добавить очистку ресурсов
-          logger.info('Ресурсы очищены');
+          logger.info('Resources cleaned up');
         } catch (error) {
-          logger.error('Ошибка при очистке ресурсов:', error);
+          logger.error('Error cleaning up resources:', error);
         }
         
         process.exit(0);
@@ -246,7 +263,7 @@ async function startServer() {
 
       // Принудительная остановка через 10 секунд
       setTimeout(() => {
-        logger.error('Принудительная остановка сервера');
+        logger.error('Forced server shutdown');
         process.exit(1);
       }, 10000);
     };
@@ -255,24 +272,24 @@ async function startServer() {
     process.on('SIGINT', () => shutdown('SIGINT'));
 
   } catch (error) {
-    logger.error('Ошибка запуска сервера:', error);
+    logger.error('Server startup error:', error);
     process.exit(1);
   }
 }
 
 // Обработка необработанных ошибок
 process.on('uncaughtException', (error) => {
-  logger.error('Необработанное исключение:', error);
+  logger.error('Unhandled exception:', error);
   process.exit(1);
 });
 
 process.on('unhandledRejection', (reason, promise) => {
-  logger.error('Необработанное отклонение промиса:', reason);
+  logger.error('Unhandled promise rejection:', reason);
   process.exit(1);
 });
 
 // Запускаем сервер
 startServer().catch((error) => {
-  logger.error('Критическая ошибка при запуске:', error);
+  logger.error('Critical startup error:', error);
   process.exit(1);
 });

@@ -1,6 +1,11 @@
 import winston from 'winston';
 import { existsSync, mkdirSync } from 'fs';
 
+// Настройка кодировки для корректного отображения кириллицы
+process.env.LANG = 'C.UTF-8';
+process.env.LC_ALL = 'C.UTF-8';
+process.env.LC_CTYPE = 'C.UTF-8';
+
 // Директория логов по умолчанию
 const LOG_DIR = 'services/knowledge-base/logs';
 
@@ -39,10 +44,12 @@ export const logger = winston.createLogger({
 		new winston.transports.File({
 			filename: `${LOG_DIR}/error.log`,
 			level: 'error',
+			options: { flags: 'a', encoding: 'utf8' }
 		}),
 		// Все логи в общий файл
 		new winston.transports.File({
 			filename: `${LOG_DIR}/combined.log`,
+			options: { flags: 'a', encoding: 'utf8' }
 		}),
 		// Вывод в консоль
 		new winston.transports.Console({
