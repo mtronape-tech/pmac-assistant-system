@@ -22,7 +22,7 @@ import type {
 // Схемы валидации
 const SearchQuerySchema = z.object({
   query: z.string().min(1),
-  limit: z.number().int().min(1).max(50).optional().default(10),
+  limit: z.number().int().min(1).max(100).optional().default(50),
   threshold: z.number().min(0).max(1).optional().default(0.7),
   includeContent: z.boolean().optional().default(true),
   filters: z.object({
@@ -36,7 +36,7 @@ const SearchQuerySchema = z.object({
 
 const AIQuerySchema = z.object({
   query: z.string().min(1),
-  maxSources: z.number().int().min(1).max(10).optional().default(5),
+  maxSources: z.number().int().min(1).max(20).optional().default(10),
   includeReasoning: z.boolean().optional().default(true),
 });
 

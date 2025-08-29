@@ -1,5 +1,6 @@
 import { Bot, MessageSquare, Settings, Zap, BookOpen } from "lucide-react";
 import Link from "next/link";
+import SettingsButton from "../../components/SettingsButton";
 
 export default function MCPServerPage() {
   const features = [
@@ -66,6 +67,7 @@ export default function MCPServerPage() {
                 <div className="w-2 h-2 bg-green-500 rounded-full"></div>
                 <span>MCP Server работает</span>
               </div>
+              <SettingsButton />
             </div>
           </div>
         </div>

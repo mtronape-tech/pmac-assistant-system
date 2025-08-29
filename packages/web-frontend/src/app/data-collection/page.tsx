@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react";
 import { Settings, Zap, Database, Activity, ArrowUpDown, Eye, TrendingUp, Clock, AlertTriangle, Wifi, WifiOff, BarChart3, Download, Upload, Play, Pause, RotateCcw } from "lucide-react";
 import Link from "next/link";
+import SettingsButton from "../../components/SettingsButton";
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar, PieChart, Pie, Cell } from "recharts";
 
 interface DataCollectionStats {
@@ -199,6 +200,7 @@ export default function DataCollectionPage() {
               <div className="text-sm text-slate-500 dark:text-slate-400">
                 Обновлено: {stats.lastUpdate}
               </div>
+              <SettingsButton />
             </div>
           </div>
         </div>

@@ -6,7 +6,8 @@ import type {
   PMACVariableType, 
   PMACStatus, 
   PMACDataPoint,
-  PMACConnection 
+  PMACConnection,
+  DriveStatus
 } from '../types/pmac-types.js';
 
 export interface PMACConnectionOptions {
@@ -39,6 +40,7 @@ export abstract class PMACConnectionBase extends EventEmitter {
   abstract executeCommand(command: string): Promise<string>;
   abstract getStatus(): Promise<PMACStatus>;
   abstract getDataPoint(): PMACDataPoint;
+  abstract getDrives(): Promise<DriveStatus[]>;
 
   public isConnectionAlive(): boolean {
     return this.isConnected;
@@ -181,6 +183,13 @@ export class PMACSimulationConnection extends PMACConnectionBase {
     return this.simulator.getStatus();
   }
 
+  async getDrives(): Promise<DriveStatus[]> {
+    if (!this.isConnected) {
+      throw new Error('PMAC не подключен');
+    }
+    return this.simulator.getDrives();
+  }
+
   getDataPoint(): PMACDataPoint {
     return this.simulator.getDataPoint();
   }
@@ -222,6 +231,10 @@ export class PMACTCPConnection extends PMACConnectionBase {
     throw new Error('TCP подключение пока не реализовано');
   }
 
+  async getDrives(): Promise<DriveStatus[]> {
+    throw new Error('TCP подключение пока не реализовано');
+  }
+
   getDataPoint(): PMACDataPoint {
     throw new Error('TCP подключение пока не реализовано');
   }
@@ -251,6 +264,10 @@ export class PMACSerialConnection extends PMACConnectionBase {
   }
 
   async getStatus(): Promise<PMACStatus> {
+    throw new Error('Serial подключение пока не реализовано');
+  }
+
+  async getDrives(): Promise<DriveStatus[]> {
     throw new Error('Serial подключение пока не реализовано');
   }
 
@@ -413,6 +430,18 @@ export class PMACConnectionManager extends EventEmitter {
       throw new Error('Нет активного подключения');
     }
     return this.activeConnection.getStatus();
+  }
+
+  async getDrives(): Promise<DriveStatus[]> {
+    if (!this.activeConnection) {
+      throw new Error('Нет активного подключения');
+    }
+    // Проверяем, есть ли метод getDrives у активного подключения
+    if ('getDrives' in this.activeConnection && typeof this.activeConnection.getDrives === 'function') {
+      return (this.activeConnection as any).getDrives();
+    }
+    // Если метод не доступен, возвращаем пустой массив
+    return [];
   }
 
   getDataPoint(): PMACDataPoint {

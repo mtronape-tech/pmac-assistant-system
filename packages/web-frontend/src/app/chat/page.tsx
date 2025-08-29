@@ -3,6 +3,7 @@
 import { useState, useRef, useEffect } from "react";
 import { Send, Bot, User, Loader2, Settings, Zap, FileText, HelpCircle, TrendingUp } from "lucide-react";
 import Link from "next/link";
+import SettingsButton from "../../components/SettingsButton";
 
 interface Message {
   id: string;
@@ -154,13 +155,7 @@ export default function ChatPage() {
                 <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></div>
                 <span>AI Assistant активен</span>
               </div>
-              <Link
-                href="/mcp"
-                className="flex items-center space-x-2 text-sm text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white transition-colors"
-              >
-                <Settings className="w-4 h-4" />
-                <span>Настройки</span>
-              </Link>
+              <SettingsButton />
             </div>
           </div>
         </div>

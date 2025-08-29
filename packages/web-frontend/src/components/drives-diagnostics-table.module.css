@@ -1,0 +1,49 @@
+.drivesTable {
+  width: 100%;
+  overflow-x: auto;
+}
+
+.drivesGrid {
+  display: grid;
+  grid-template-columns: 200px repeat(8, 120px);
+  gap: 0;
+  min-width: max-content;
+}
+
+.drivesHeader {
+  display: grid;
+  grid-template-columns: 200px repeat(8, 120px);
+  gap: 0;
+  border-bottom: 1px solid hsl(var(--border));
+  padding-bottom: 0.5rem;
+  margin-bottom: 1rem;
+  min-width: max-content;
+}
+
+.drivesRow {
+  display: grid;
+  grid-template-columns: 200px repeat(8, 120px);
+  gap: 0;
+  align-items: center;
+  min-width: max-content;
+}
+
+.parameterCell {
+  font-weight: 500;
+  color: hsl(var(--foreground));
+  padding: 0.5rem 0;
+}
+
+.dataCell {
+  text-align: center;
+  padding: 0.5rem 0;
+  color: hsl(var(--foreground));
+}
+
+.dataCellMono {
+  text-align: center;
+  padding: 0.5rem 0;
+  font-family: ui-monospace, SFMono-Regular, "SF Mono", Consolas, "Liberation Mono", Menlo, monospace;
+  font-size: 0.875rem;
+  color: hsl(var(--foreground));
+}

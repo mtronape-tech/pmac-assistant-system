@@ -72,7 +72,7 @@ export default function SearchPage() {
       
       if (searchMode === 'semantic') {
         // AI-поиск
-        const response = await fetch('http://localhost:3005/ask', {
+        const response = await fetch('/api/ask', {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
@@ -109,7 +109,7 @@ export default function SearchPage() {
         }
       } else {
         // Обычный поиск по ключевым словам
-        const response = await fetch('http://localhost:3005/search', {
+        const response = await fetch('/api/search', {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',

@@ -5,7 +5,8 @@ import type {
   PMACVariableType, 
   PMACStatus, 
   PMACDataPoint,
-  PMACConnection 
+  PMACConnection,
+  DriveStatus
 } from '../types/pmac-types.js';
 
 export interface PMACVariable {
@@ -41,6 +42,7 @@ export interface PMACAxis {
 export class AdvancedPMACSimulator extends EventEmitter {
   private variables: Map<string, PMACVariable> = new Map();
   private axes: Map<string, PMACAxis> = new Map();
+  private drives: DriveStatus[] = [];
   private controllerState: 'idle' | 'running' | 'error' | 'homing' | 'programming' = 'idle';
   private connectionState: 'connected' | 'disconnected' | 'error' = 'disconnected';
   private startTime: Date = new Date();
@@ -59,6 +61,7 @@ export class AdvancedPMACSimulator extends EventEmitter {
     super();
     this.initializeVariables();
     this.initializeAxes();
+    this.initializeDrives();
     this.startSimulation();
   }
 
@@ -150,6 +153,56 @@ export class AdvancedPMACSimulator extends EventEmitter {
     logger.info(`Инициализировано ${this.axes.size} осей`);
   }
 
+  private initializeDrives(): void {
+    const driveConfigs = [
+      { id: 1, name: 'Мотор 1', axis: 'X' },
+      { id: 2, name: 'Мотор 2', axis: 'Y' },
+      { id: 3, name: 'Мотор 3', axis: 'Z' },
+      { id: 4, name: 'Мотор 4', axis: 'A' },
+      { id: 5, name: 'Мотор 5', axis: 'B' },
+      { id: 6, name: 'Мотор 6', axis: 'C' },
+      { id: 7, name: 'Мотор 7', axis: 'S' },
+      { id: 8, name: 'Мотор 8', axis: 'S1' }
+    ];
+
+    driveConfigs.forEach(config => {
+      const drive: DriveStatus = {
+        id: config.id,
+        name: config.name,
+        axis: config.axis,
+        converterState: Math.random() > 0.95 ? 'ERROR' : 'OK',
+        operationPermission: Math.random() > 0.1,
+        fanOn: Math.random() > 0.2,
+        dynamicBraking: Math.random() > 0.8,
+        error: Math.random() > 0.95,
+        state: this.getRandomDriveState(),
+        trackingStatus: this.getRandomTrackingStatus(),
+        current: Math.random() * 10, // 0-10A
+        temperature: 20 + Math.random() * 25, // 20-45°C
+        lastUpdated: new Date()
+      };
+      this.drives.push(drive);
+    });
+
+    logger.info(`Инициализировано ${this.drives.length} приводов`);
+  }
+
+  private getRandomDriveState(): 'O' | 'L' | 'H' | '1' {
+    const rand = Math.random();
+    if (rand < 0.7) return 'O';      // 70% - норма
+    if (rand < 0.85) return 'L';     // 15% - нет питания
+    if (rand < 0.95) return 'H';     // 10% - подано питание
+    return '1';                       // 5% - ошибка
+  }
+
+  private getRandomTrackingStatus(): 'Ось в слежении' | 'Нет питания' | 'Подано питание' | 'Ошибка' {
+    const rand = Math.random();
+    if (rand < 0.7) return 'Ось в слежении';
+    if (rand < 0.85) return 'Нет питания';
+    if (rand < 0.95) return 'Подано питание';
+    return 'Ошибка';
+  }
+
   private startSimulation(): void {
     this.connectionState = 'connected';
     this.updateInterval = setInterval(() => {
@@ -169,6 +222,9 @@ export class AdvancedPMACSimulator extends EventEmitter {
       this.updateAxesPosition();
     }
 
+    // Обновляем приводы
+    this.updateDrives();
+
     // Обновляем некоторые переменные
     this.updateVariables();
 
@@ -177,6 +233,43 @@ export class AdvancedPMACSimulator extends EventEmitter {
 
     // Эмитируем событие обновления данных
     this.emit('dataUpdated', this.getDataPoint());
+  }
+
+  private updateDrives(): void {
+    this.drives.forEach(drive => {
+      // Обновляем ток (0-10A с плавными изменениями)
+      const currentChange = (Math.random() - 0.5) * 0.5;
+      drive.current = Math.max(0, Math.min(10, drive.current + currentChange));
+      
+      // Обновляем температуру (20-45°C с плавными изменениями)
+      const tempChange = (Math.random() - 0.5) * 0.3;
+      drive.temperature = Math.max(20, Math.min(45, drive.temperature + tempChange));
+      
+      // Случайно изменяем состояние вентилятора
+      if (Math.random() < 0.1) {
+        drive.fanOn = !drive.fanOn;
+      }
+      
+      // Случайно изменяем динамическое торможение
+      if (Math.random() < 0.05) {
+        drive.dynamicBraking = !drive.dynamicBraking;
+      }
+      
+      // Случайно генерируем ошибки
+      if (Math.random() < 0.02) {
+        drive.error = true;
+        drive.state = '1';
+        drive.trackingStatus = 'Ошибка';
+      } else if (drive.error && Math.random() < 0.1) {
+        // Восстанавливаемся от ошибки
+        drive.error = false;
+        drive.state = this.getRandomDriveState();
+        drive.trackingStatus = this.getRandomTrackingStatus();
+      }
+      
+      // Обновляем время последнего обновления
+      drive.lastUpdated = new Date();
+    });
   }
 
   private updateSystemData(): void {
@@ -483,6 +576,7 @@ export class AdvancedPMACSimulator extends EventEmitter {
       }, {} as Record<string, number>),
       variables,
       axes,
+      drives: this.drives,
       system: {
         temperature: this.systemData.temperature,
         voltage: this.systemData.voltage,
@@ -511,6 +605,10 @@ export class AdvancedPMACSimulator extends EventEmitter {
         errorCodes: this.errorCodes,
       },
     };
+  }
+
+  getDrives(): DriveStatus[] {
+    return this.drives;
   }
 
   getConnectionInfo(): PMACConnection {

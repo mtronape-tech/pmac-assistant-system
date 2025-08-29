@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-unsafe-declaration-merging */
 import { NextRequest, NextResponse } from 'next/server';
 
 interface ChatRequest {

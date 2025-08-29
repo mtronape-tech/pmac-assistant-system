@@ -1,5 +1,6 @@
 import { Settings, Zap, Gauge, Activity, ArrowUpDown, Eye, Edit3, Code } from "lucide-react";
 import Link from "next/link";
+import SettingsButton from "../../components/SettingsButton";
 
 export default function PMACControlPage() {
   const variableTypes = [
@@ -70,6 +71,7 @@ export default function PMACControlPage() {
                 <div className="w-2 h-2 bg-green-500 rounded-full"></div>
                 <span>Подключен к симулятору</span>
               </div>
+              <SettingsButton />
             </div>
           </div>
         </div>

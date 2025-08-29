@@ -30,6 +30,7 @@ export interface PMACStatus {
     L: Record<number, number>;
   };
   axes: Record<string, AxisStatus>;
+  drives: DriveStatus[];
   system: SystemInfo;
 }
 
@@ -42,6 +43,22 @@ export interface AxisStatus {
     positive: boolean;
     negative: boolean;
   };
+}
+
+export interface DriveStatus {
+  id: number;
+  name: string;
+  axis: string;
+  converterState: 'OK' | 'ERROR';
+  operationPermission: boolean;
+  fanOn: boolean;
+  dynamicBraking: boolean;
+  error: boolean;
+  state: 'O' | 'L' | 'H' | '1'; // O-норма, L-нет питания, H-подано питание, 1-ошибка
+  trackingStatus: 'Ось в слежении' | 'Нет питания' | 'Подано питание' | 'Ошибка';
+  current: number; // ток в амперах
+  temperature: number; // температура в градусах Цельсия
+  lastUpdated: Date;
 }
 
 export interface SystemInfo {

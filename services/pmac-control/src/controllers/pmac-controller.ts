@@ -76,6 +76,36 @@ export class PMACController {
     }
   };
 
+  // Получение данных о приводах
+  getDrives = async (req: Request, res: Response): Promise<void> => {
+    try {
+      if (!this.connectionManager.isConnected()) {
+        res.status(503).json({
+          success: false,
+          error: 'PMAC не подключен',
+          code: 'NOT_CONNECTED'
+        });
+        return;
+      }
+
+      const drives = await this.connectionManager.getDrives();
+      
+      res.json({
+        success: true,
+        data: drives,
+        timestamp: new Date().toISOString()
+      });
+    } catch (error) {
+      logger.error('Ошибка получения данных о приводах:', error);
+      res.status(500).json({
+        success: false,
+        error: 'Ошибка получения данных о приводах',
+        code: 'DRIVES_ERROR',
+        details: error instanceof Error ? error.message : 'Неизвестная ошибка'
+      });
+    }
+  };
+
   // Чтение переменной
   readVariable = async (req: Request, res: Response): Promise<void> => {
     try {

@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { BarChart3, TrendingUp, Activity, Gauge, Calendar, Filter, Download, Zap } from "lucide-react";
 import Link from "next/link";
+import SettingsButton from "../../components/SettingsButton";
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar, PieChart, Pie, Cell } from "recharts";
 
 export default function AnalyticsPage() {
@@ -159,6 +160,7 @@ export default function AnalyticsPage() {
                 <div className="w-2 h-2 bg-green-500 rounded-full"></div>
                 <span>Данные обновляются</span>
               </div>
+              <SettingsButton />
             </div>
           </div>
         </div>

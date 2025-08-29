@@ -60,6 +60,7 @@ app.get('/health', pmacController.healthCheck);
 // PMAC Status
 app.get('/pmac/status', pmacController.getStatus);
 app.get('/pmac/data', pmacController.getDataPoint);
+app.get('/pmac/drives', pmacController.getDrives);
 
 // Variables
 app.get('/pmac/variable', pmacController.readVariable);

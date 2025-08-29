@@ -342,28 +342,51 @@ export class VectraService {
 
   async searchDocuments(query: string, options: { limit?: number; threshold?: number } = {}): Promise<SearchResult[]> {
     try {
-      if (!this.isAvailable) {
-        logger.warn('Vectra недоступен, используем in-memory поиск');
-        return this.searchInMemory({ query, limit: options.limit });
-      }
-
+      logger.info(`🔍 Поиск документов: "${query}" с опциями:`, options);
+      
       const results: SearchResult[] = [];
       
-      // Сначала пробуем поиск по эмбеддингам
+      // Сначала пробуем поиск по эмбеддингам через Vectra
       try {
-        // Генерируем эмбеддинг для запроса
-        if (this.openaiService) {
+        if (this.openaiService && this.index) {
+          // Генерируем эмбеддинг для запроса
           const queryEmbedding = await this.openaiService.generateEmbedding({ text: query });
           
           if (queryEmbedding && queryEmbedding.embedding && queryEmbedding.embedding.length > 0) {
-            const searchResults = await this.index.queryItems(queryEmbedding.embedding, query, options.limit || 10);
+            logger.info(`Выполняем семантический поиск через Vectra для "${query}"`);
             
-            // Обрабатываем результаты поиска
+            // Правильный вызов queryItems согласно документации Vectra
+            // queryItems(vector, query, limit) - первый параметр это вектор, второй - запрос, третий - лимит
+            const searchResults = await this.index.queryItems(
+              queryEmbedding.embedding,
+              query,
+              options.limit || 50
+            );
+            
+            logger.info(`Vectra вернул ${searchResults.length} результатов семантического поиска`);
+            
+            // Обрабатываем результаты поиска Vectra
             for (const result of searchResults) {
               try {
+                // Проверяем score - если он ниже threshold, пропускаем
+                if (options.threshold && result.score < options.threshold) {
+                  logger.debug(`Результат с score ${result.score} ниже threshold ${options.threshold}, пропускаем`);
+                  continue;
+                }
+                
+                // Получаем documentId из метаданных
+                const documentId = result.item.metadata.documentId as string;
+                if (!documentId) {
+                  logger.warn('Результат поиска не содержит documentId, пропускаем');
+                  continue;
+                }
+                
                 // Получаем документ
-                const document = await this.getDocument(result.item.metadata.documentId as string);
-                if (!document) continue;
+                const document = await this.getDocument(documentId);
+                if (!document) {
+                  logger.warn(`Документ ${documentId} не найден, пропускаем результат`);
+                  continue;
+                }
 
                 // Создаем результат поиска
                 const searchResult: SearchResult = {
@@ -379,7 +402,7 @@ export class VectraService {
                   },
                   chunk: {
                     id: result.item.metadata.chunkId as string,
-                    documentId: result.item.metadata.documentId as string,
+                    documentId: documentId,
                     content: result.item.metadata.content as string,
                     pageNumber: result.item.metadata.pageNumber as number | undefined,
                     chunkIndex: result.item.metadata.chunkIndex as number | undefined,
@@ -397,6 +420,7 @@ export class VectraService {
                 };
                 
                 results.push(searchResult);
+                logger.debug(`Добавлен результат: chunkIndex ${searchResult.chunk?.chunkIndex}, score ${result.score}`);
               } catch (error) {
                 logger.warn(`Ошибка при обработке результата поиска: ${error}`);
                 continue;
@@ -406,22 +430,32 @@ export class VectraService {
             logger.warn('Не удалось сгенерировать эмбеддинг для запроса, пропускаем семантический поиск');
           }
         } else {
-          logger.warn('AI сервис недоступен, пропускаем семантический поиск');
+          logger.warn('AI сервис или Vectra индекс недоступен, пропускаем семантический поиск');
         }
       } catch (error) {
-        logger.warn(`Ошибка при семантическом поиске: ${error}`);
+        logger.warn(`Ошибка при семантическом поиске через Vectra: ${error}`);
       }
 
-      // Если семантический поиск не дал результатов или дал мало результатов,
-      // добавляем текстовый поиск как fallback
-      // ВАЖНО: Всегда добавляем текстовый поиск для лучшего покрытия всего документа
+      // Если семантический поиск дал достаточно результатов, возвращаем их
+      if (results.length >= (options.limit || 50)) {
+        logger.info(`Семантический поиск дал достаточно результатов (${results.length}), возвращаем их`);
+        return results.slice(0, options.limit || 50);
+      }
+
+      // Если семантический поиск дал мало результатов, добавляем текстовый поиск
       logger.info(`Семантический поиск дал ${results.length} результатов, добавляем текстовый поиск для полноты`);
       
-      // Сначала пробуем обычный in-memory поиск
-      const textSearchResults = await this.searchInMemory({ 
+      // Выполняем текстовый поиск по всем чанкам
+      const textSearchResults = await this.searchInAllChunks(
         query, 
-        limit: Math.max(5, (options.limit || 10) - results.length) // Минимум 5 результатов текстового поиска
-      });
+        undefined, // undefined означает поиск по всем документам
+        Math.max(20, (options.limit || 50) - results.length), // Минимум 20 результатов для лучшего покрытия
+        {
+          reverseOrder: false, // Сначала ищем в начале документа
+          prioritizeEnd: false,
+          useChunkIndex: true
+        }
+      );
       
       // Добавляем уникальные результаты текстового поиска
       for (const textResult of textSearchResults) {
@@ -434,60 +468,27 @@ export class VectraService {
           results.push(textResult);
         }
       }
-      
-      // Если все еще мало результатов ИЛИ нужно найти результаты в конце документа,
-      // ищем по всем чанкам основного документа
-      if (results.length < (options.limit || 10) || true) { // Всегда ищем по всем чанкам
-        let targetDocumentId = null;
-        
-        // Если есть результаты, используем первый документ
-        if (results.length > 0) {
-          targetDocumentId = results[0].document.id;
-        } else {
-          // Если нет результатов, используем последний загруженный документ
-          const allDocuments = await this.getAllDocuments();
-          if (allDocuments.length > 0) {
-            // Сортируем по дате загрузки и берем последний
-            const sortedDocs = allDocuments.sort((a, b) => 
-              new Date(b.uploadDate).getTime() - new Date(a.uploadDate).getTime()
-            );
-            targetDocumentId = sortedDocs[0].id;
-          }
-        }
-        
-        if (targetDocumentId) {
-          logger.info(`Ищем по всем чанкам документа ${targetDocumentId}, начиная с конца`);
-          
-          const allChunksResults = await this.searchInAllChunks(
-            query, 
-            targetDocumentId, 
-            Math.max(5, (options.limit || 10) - results.length), // Минимум 5 результатов
-            {
-              reverseOrder: true,
-              prioritizeEnd: true,
-              useChunkIndex: true
-            }
-          );
-          
-          // Добавляем уникальные результаты
-          for (const chunkResult of allChunksResults) {
-            const isDuplicate = results.some(r => 
-              r.document.id === chunkResult.document.id && 
-              r.chunk?.id === chunkResult.chunk?.id
-            );
-            
-            if (!isDuplicate) {
-              results.push(chunkResult);
-            }
-          }
-        }
-      }
 
-      return results;
+      // Сортируем результаты по score (если есть) и chunkIndex
+      results.sort((a, b) => {
+        // Если у обоих есть score, сортируем по score
+        if (a.score !== undefined && b.score !== undefined) {
+          if (Math.abs(a.score - b.score) < 0.1) {
+            // При близких score сортируем по chunkIndex
+            return (a.chunk?.chunkIndex || 0) - (b.chunk?.chunkIndex || 0);
+          }
+          return b.score - a.score;
+        }
+        // Если score нет, сортируем по chunkIndex
+        return (a.chunk?.chunkIndex || 0) - (b.chunk?.chunkIndex || 0);
+      });
+
+      logger.info(`Итоговый результат поиска: ${results.length} результатов`);
+      return results.slice(0, options.limit || 50);
     } catch (error) {
       logger.error(`Ошибка при поиске документов: ${error}`);
       // Fallback к in-memory поиску
-      return this.searchInMemory({ query, limit: options.limit });
+      return this.searchInMemory({ query: query, limit: options.limit });
     }
   }
 
@@ -535,13 +536,27 @@ export class VectraService {
       .slice(0, query.limit || 10);
   }
 
-  private async searchInAllChunks(query: string, documentId: string, limit: number = 10, searchOptions: {
+  private async searchInAllChunks(query: string, documentId: string | undefined, limit: number = 10, searchOptions: {
     reverseOrder?: boolean;
     prioritizeEnd?: boolean;
     useChunkIndex?: boolean;
   } = {}): Promise<SearchResult[]> {
     try {
-      const document = await this.getDocument(documentId);
+      // Если documentId не передан, ищем по всем документам
+      if (!documentId) {
+        const allDocuments = await this.getAllDocuments();
+        if (allDocuments.length === 0) {
+          return [];
+        }
+        // Сортируем по дате загрузки и берем последний
+        const sortedDocs = allDocuments.sort((a, b) => 
+          new Date(b.uploadDate).getTime() - new Date(a.uploadDate).getTime()
+        );
+        documentId = sortedDocs[0].id; // Используем первый документ для поиска по всем чанкам
+      }
+
+      // Теперь documentId гарантированно строка
+      const document = await this.getDocument(documentId as string);
       if (!document) return [];
 
       const results: SearchResult[] = [];
@@ -549,7 +564,7 @@ export class VectraService {
       const queryWords = queryLower.split(/\s+/).filter(word => word.length > 2);
       
       // Получаем все чанки документа
-      const allChunks = await this.getAllDocumentChunks(documentId);
+      const allChunks = await this.getAllDocumentChunks(documentId as string);
       
       // Определяем порядок сортировки
       if (searchOptions.reverseOrder || searchOptions.prioritizeEnd) {
@@ -590,19 +605,26 @@ export class VectraService {
           // Бонус за близость к концу документа (если prioritizeEnd включен)
           if (searchOptions.prioritizeEnd && document.totalChunks) {
             const chunkPosition = (chunk.chunkIndex || 0) / (document.totalChunks || 1);
-            const endBonus = chunkPosition * 0.2; // До 20% бонуса
+            const endBonus = chunkPosition * 0.3; // Увеличиваем бонус до 30%
             score += endBonus;
           }
           
           // Бонус за точное совпадение в начале чанка
           const matchPosition = contentLower.indexOf(queryLower);
           if (matchPosition >= 0 && matchPosition < 100) {
-            score += 0.1;
+            score += 0.15; // Увеличиваем бонус
           }
           
           // Бонус за длину совпадения
           if (matchType === 'exact_phrase') {
-            score += Math.min(queryLower.length / 100, 0.1);
+            score += Math.min(queryLower.length / 100, 0.15); // Увеличиваем бонус
+          }
+          
+          // Бонус за релевантность контекста (если чанк содержит технические термины)
+          const technicalTerms = ['const', 'constexpr', 'enum', 'class', 'struct', 'template', 'function', 'variable', 'type'];
+          const hasTechnicalTerms = technicalTerms.some(term => contentLower.includes(term));
+          if (hasTechnicalTerms) {
+            score += 0.1;
           }
         }
         

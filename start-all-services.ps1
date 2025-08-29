@@ -2,6 +2,16 @@
 # Author: PMAC Assistant Team
 # Version: 1.0.0
 
+# Force UTF-8 console for proper log output
+try {
+    [Console]::OutputEncoding = New-Object System.Text.UTF8Encoding $false
+    $OutputEncoding = New-Object System.Text.UTF8Encoding
+    chcp 65001 > $null 2>&1
+    $PSDefaultParameterValues['Get-Content:Encoding'] = 'utf8'
+    $env:NODE_ENV = 'development'
+    $env:LC_ALL = 'C.UTF-8'
+} catch {}
+
 Write-Host "Starting PMAC Assistant System" -ForegroundColor Green
 Write-Host "==========================================" -ForegroundColor Green
 
@@ -27,7 +37,13 @@ function Test-Port {
 
 # Function to wait for service startup
 function Wait-ForService {
-    param($serviceName, $port, $maxWait = 30)
+    param(
+        $serviceName,
+        $port,
+        $maxWait = 45,
+        $logFile = $null,
+        $healthUrl = $null
+    )
     Write-Host "Waiting for $serviceName on port $port..." -ForegroundColor Yellow
     $waitTime = 0
     while ($waitTime -lt $maxWait) {
@@ -35,6 +51,27 @@ function Wait-ForService {
             Write-Host "OK $serviceName started on port $port" -ForegroundColor Green
             return $true
         }
+
+        # Every 5 seconds show health and last log lines
+        if (($waitTime % 5) -eq 0) {
+            if ($healthUrl) {
+                try {
+                    $resp = Invoke-WebRequest -Uri $healthUrl -UseBasicParsing -TimeoutSec 3 -ErrorAction Stop
+                    Write-Host ("  health {0}: {1}" -f $healthUrl, $resp.StatusCode) -ForegroundColor DarkCyan
+                } catch {
+                    Write-Host ("  health {0}: error {1}" -f $healthUrl, $_.Exception.Message) -ForegroundColor DarkYellow
+                }
+            }
+            if ($logFile) {
+                if (Test-Path $logFile) {
+                    Write-Host ("  tail {0}:" -f $logFile) -ForegroundColor DarkGray
+                    try { Get-Content -Path $logFile -Tail 15 -Encoding UTF8 | ForEach-Object { Write-Host ("    " + $_) -ForegroundColor DarkGray } } catch {}
+                } else {
+                    Write-Host ("  tail {0}: (log not created yet)" -f $logFile) -ForegroundColor DarkGray
+                }
+            }
+        }
+
         Start-Sleep 1
         $waitTime++
     }
@@ -63,40 +100,52 @@ if (-not (Test-Path "logs")) {
     New-Item -ItemType Directory -Path "logs" | Out-Null
 }
 
-# Start services in background
-Write-Host "`nStarting services..." -ForegroundColor Cyan
+# Start services in background (single window mode)
+Write-Host "`nStarting services (background)..." -ForegroundColor Cyan
 
- 
+function Start-BackgroundService {
+    param(
+        [string]$name,
+        [string]$workingDir,
+        [string]$buildCmd,
+        [string]$startCmd,
+        [string]$logFile
+    )
+    Write-Host "$name → starting..." -ForegroundColor Blue
 
-# 1. Data Collection Service (port 3002)
-Write-Host "1. Starting Data Collection Service..." -ForegroundColor Blue
-Start-Process powershell -ArgumentList "-NoExit", "-Command", "cd '$PWD/services/data-collection'; npm run build; if (`$LASTEXITCODE -eq 0) { npm start } else { Write-Host 'Build failed!' -ForegroundColor Red; Read-Host 'Press Enter to close' }"
-Start-Sleep 5
+    # Prepare log file
+    if (Test-Path $logFile) { Clear-Content -Path $logFile -ErrorAction SilentlyContinue } else { New-Item -ItemType File -Path $logFile -Force | Out-Null }
 
-# 2. MCP Server (port 3004)
-Write-Host "2. Starting MCP Server..." -ForegroundColor Blue
-Start-Process powershell -ArgumentList "-NoExit", "-Command", "cd '$PWD/services/mcp-server'; npm run build; if (`$LASTEXITCODE -eq 0) { npm start } else { Write-Host 'Build failed!' -ForegroundColor Red; Read-Host 'Press Enter to close' }"
-Start-Sleep 5
+    # Build command and redirect both stdout and stderr to the same log file
+    if ($buildCmd -eq "") {
+        $cmdCore = "cd '$workingDir'; $startCmd"
+    } else {
+        $cmdCore = "cd '$workingDir'; $buildCmd; if (`$LASTEXITCODE -eq 0) { $startCmd } else { Write-Error '$name build failed' }"
+    }
+    $cmd = "& { $cmdCore } *> '$logFile' 2>&1"
 
-# 3. PMAC Control Service (port 3001)
-Write-Host "3. Starting PMAC Control Service..." -ForegroundColor Blue
-Start-Process powershell -ArgumentList "-NoExit", "-Command", "cd '$PWD/services/pmac-control'; npm run build; if (`$LASTEXITCODE -eq 0) { npm start } else { Write-Host 'Build failed!' -ForegroundColor Red; Read-Host 'Press Enter to close' }"
-Start-Sleep 5
+    Start-Process -FilePath powershell -WindowStyle Hidden -ArgumentList "-NoLogo","-NoProfile","-Command", $cmd | Out-Null
+}
 
-# 4. Knowledge Base Service (port 3005)
-Write-Host "4. Starting Knowledge Base Service..." -ForegroundColor Blue
-Start-Process powershell -ArgumentList "-NoExit", "-Command", "cd '$PWD/services/knowledge-base'; npm run build; if (`$LASTEXITCODE -eq 0) { npm start } else { Write-Host 'Build failed!' -ForegroundColor Red; Read-Host 'Press Enter to close' }"
-Start-Sleep 5
+$dcLog = Join-Path $PWD "logs/data-collection.log"
+$mcpLog = Join-Path $PWD "logs/mcp-server.log"
+$pmacLog = Join-Path $PWD "logs/pmac-control.log"
+$kbLog = Join-Path $PWD "logs/knowledge-base.log"
+$anLog = Join-Path $PWD "logs/analytics.log"
+$feLog = Join-Path $PWD "logs/web-frontend.log"
 
-# 5. Analytics Service (port 3003) - Python
-Write-Host "5. Starting Analytics Service..." -ForegroundColor Blue
-Start-Process powershell -ArgumentList "-NoExit", "-Command", "cd '$PWD/services/analytics'; python simple_analytics_service.py"
-Start-Sleep 5
-
-# 6. Web Frontend (port 3000)
-Write-Host "6. Starting Web Frontend..." -ForegroundColor Blue
-Start-Process powershell -ArgumentList "-NoExit", "-Command", "cd '$PWD/packages/web-frontend'; npm run dev"
-Start-Sleep 5
+Start-BackgroundService -name "1. Data Collection" -workingDir (Join-Path $PWD "services/data-collection") -buildCmd "npm run build" -startCmd "chcp 65001; `$OutputEncoding = [System.Text.Encoding]::UTF8; `$env:LC_ALL = 'C.UTF-8'; npm start" -logFile $dcLog
+Start-Sleep 1
+Start-BackgroundService -name "2. MCP Server" -workingDir (Join-Path $PWD "services/mcp-server") -buildCmd "npm run build" -startCmd "chcp 65001; `$OutputEncoding = [System.Text.Encoding]::UTF8; `$env:LC_ALL = 'C.UTF-8'; npm start" -logFile $mcpLog
+Start-Sleep 1
+Start-BackgroundService -name "3. PMAC Control" -workingDir (Join-Path $PWD "services/pmac-control") -buildCmd "npm run build" -startCmd "chcp 65001; `$OutputEncoding = [System.Text.Encoding]::UTF8; `$env:LC_ALL = 'C.UTF-8'; npm start" -logFile $pmacLog
+Start-Sleep 1
+Start-BackgroundService -name "4. Knowledge Base" -workingDir (Join-Path $PWD "services/knowledge-base") -buildCmd "npm run build" -startCmd "chcp 65001; `$OutputEncoding = [System.Text.Encoding]::UTF8; `$env:NODE_OPTIONS = '--max-old-space-size=4096'; `$env:LC_ALL = 'C.UTF-8'; npm start" -logFile $kbLog
+Start-Sleep 1
+Start-BackgroundService -name "5. Analytics" -workingDir (Join-Path $PWD "services/analytics") -buildCmd "" -startCmd "$Env:PYTHONIOENCODING='utf-8'; python -X utf8 simple_analytics_service.py" -logFile $anLog
+Start-Sleep 1
+Start-BackgroundService -name "6. Web Frontend" -workingDir (Join-Path $PWD "packages/web-frontend") -buildCmd "" -startCmd "chcp 65001; `$OutputEncoding = [System.Text.Encoding]::UTF8; `$env:NODE_ENV = 'development'; `$env:LC_ALL = 'C.UTF-8'; npm run dev" -logFile $feLog
+Start-Sleep 2
 
 # Wait for all services to start
 Write-Host "`nWaiting for all services to start..." -ForegroundColor Yellow
@@ -104,17 +153,18 @@ Write-Host "`nWaiting for all services to start..." -ForegroundColor Yellow
  
 
 $services = @(
-    @{Name="Data Collection"; Port=3002},
-    @{Name="MCP Server"; Port=3004},
-    @{Name="PMAC Control"; Port=3001},
-    @{Name="Knowledge Base"; Port=3005},
-    @{Name="Analytics"; Port=3003},
-    @{Name="Web Frontend"; Port=3000}
+    @{Name="Data Collection"; Port=3002; Log=(Join-Path $PWD "logs/data-collection.log"); Health="http://localhost:3002/health"},
+    @{Name="MCP Server"; Port=3004; Log=(Join-Path $PWD "logs/mcp-server.log"); Health="http://localhost:3004/health"},
+    @{Name="PMAC Control"; Port=3001; Log=(Join-Path $PWD "logs/pmac-control.log"); Health="http://localhost:3001/health"},
+    @{Name="Knowledge Base"; Port=3005; Log=(Join-Path $PWD "logs/knowledge-base.log"); Health="http://localhost:3005/health"},
+    @{Name="Analytics"; Port=3003; Log=(Join-Path $PWD "logs/analytics.log"); Health="http://localhost:3003/health"},
+    @{Name="Web Frontend"; Port=3000; Log=(Join-Path $PWD "logs/web-frontend.log"); Health=$null}
 )
 
 $allStarted = $true
 foreach ($service in $services) {
-    if (-not (Wait-ForService $service.Name $service.Port)) {
+    $timeout = if ($service.Name -eq "Knowledge Base") { 60 } else { 45 }
+    if (-not (Wait-ForService $service.Name $service.Port $timeout $service.Log $service.Health)) {
         $allStarted = $false
     }
 }
@@ -143,3 +193,10 @@ if ($allStarted) {
 }
 
 Write-Host "`nSystem is ready!" -ForegroundColor Green
+
+# Live combined logs in this window (Ctrl+C to stop)
+Write-Host "`n==================== LIVE LOGS ====================" -ForegroundColor Cyan
+Write-Host "Following logs: `n - $dcLog`n - $mcpLog`n - $pmacLog`n - $kbLog`n - $anLog`n - $feLog" -ForegroundColor Gray
+Write-Host "====================================================" -ForegroundColor Cyan
+
+Get-Content -Path @($dcLog,$mcpLog,$pmacLog,$kbLog,$anLog,$feLog) -Tail 50 -Wait -Encoding UTF8
