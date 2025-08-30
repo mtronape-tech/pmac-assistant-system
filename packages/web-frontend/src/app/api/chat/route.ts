@@ -37,7 +37,7 @@ export async function POST(request: NextRequest): Promise<NextResponse<ChatRespo
         },
         body: JSON.stringify({
           query: body.message,
-          maxSources: 5,
+          maxSources: 20,
           includeReasoning: true,
         }),
       });

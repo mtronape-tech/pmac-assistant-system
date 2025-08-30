@@ -343,6 +343,17 @@ export class VectraService {
   async searchDocuments(query: string, options: { limit?: number; threshold?: number } = {}): Promise<SearchResult[]> {
     try {
       logger.info(`🔍 Поиск документов: "${query}" с опциями:`, options);
+      logger.info(`Порог поиска: ${options.threshold}, Лимит: ${options.limit}`);
+      
+      // Проверяем доступность сервисов
+      logger.info(`Vectra доступен: ${this.isAvailable}, AI сервис доступен: ${!!this.openaiService}`);
+      
+      // Логируем количество доступных документов и чанков
+      if (this.isAvailable && this.index) {
+        logger.info(`Vectra индекс доступен`);
+      }
+      
+      logger.info(`In-memory документов: ${this.inMemoryDocuments.size}, чанков: ${this.inMemoryChunks.size}`);
       
       const results: SearchResult[] = [];
       
@@ -446,6 +457,7 @@ export class VectraService {
       logger.info(`Семантический поиск дал ${results.length} результатов, добавляем текстовый поиск для полноты`);
       
       // Выполняем текстовый поиск по всем чанкам
+      logger.info(`Запускаем текстовый поиск по всем чанкам для запроса: "${query}"`);
       const textSearchResults = await this.searchInAllChunks(
         query, 
         undefined, // undefined означает поиск по всем документам
@@ -456,6 +468,8 @@ export class VectraService {
           useChunkIndex: true
         }
       );
+      
+      logger.info(`Текстовый поиск вернул ${textSearchResults.length} результатов`);
       
       // Добавляем уникальные результаты текстового поиска
       for (const textResult of textSearchResults) {
@@ -542,151 +556,194 @@ export class VectraService {
     useChunkIndex?: boolean;
   } = {}): Promise<SearchResult[]> {
     try {
-      // Если documentId не передан, ищем по всем документам
-      if (!documentId) {
-        const allDocuments = await this.getAllDocuments();
-        if (allDocuments.length === 0) {
-          return [];
-        }
-        // Сортируем по дате загрузки и берем последний
-        const sortedDocs = allDocuments.sort((a, b) => 
-          new Date(b.uploadDate).getTime() - new Date(a.uploadDate).getTime()
-        );
-        documentId = sortedDocs[0].id; // Используем первый документ для поиска по всем чанкам
-      }
-
-      // Теперь documentId гарантированно строка
-      const document = await this.getDocument(documentId as string);
-      if (!document) return [];
-
+      logger.info(`🔍 Текстовый поиск в чанках: "${query}", documentId: ${documentId || 'undefined'}, limit: ${limit}`);
+      
       const results: SearchResult[] = [];
       const queryLower = query.toLowerCase();
       const queryWords = queryLower.split(/\s+/).filter(word => word.length > 2);
       
-      // Получаем все чанки документа
-      const allChunks = await this.getAllDocumentChunks(documentId as string);
-      
-      // Определяем порядок сортировки
-      if (searchOptions.reverseOrder || searchOptions.prioritizeEnd) {
-        // Сортируем чанки по chunkIndex в обратном порядке (начинаем с конца)
-        allChunks.sort((a, b) => (b.chunkIndex || 0) - (a.chunkIndex || 0));
-      } else {
-        // Сортируем чанки по chunkIndex в обычном порядке
-        allChunks.sort((a, b) => (a.chunkIndex || 0) - (b.chunkIndex || 0));
+      // Если documentId не передан, ищем по всем документам
+      if (!documentId) {
+        const allDocuments = await this.getAllDocuments();
+        logger.info(`Найдено ${allDocuments.length} документов для поиска`);
+        if (allDocuments.length === 0) {
+          logger.warn('Нет документов для поиска');
+          return [];
+        }
+        
+        // Ищем по всем документам
+        for (const document of allDocuments) {
+          logger.info(`Ищем в документе: ${document.id} (${document.title})`);
+          
+          const documentResults = await this.searchInDocumentChunks(
+            query,
+            document,
+            Math.ceil(limit / allDocuments.length),
+            queryLower,
+            queryWords,
+            searchOptions
+          );
+          
+          results.push(...documentResults);
+          
+          if (results.length >= limit) break;
+        }
+        
+        logger.info(`Поиск по всем документам дал ${results.length} результатов`);
+        return results.slice(0, limit);
       }
+
+      // Если указан конкретный документ, ищем только в нем
+      const document = await this.getDocument(documentId as string);
+      if (!document) return [];
+
+      const documentResults = await this.searchInDocumentChunks(
+        query,
+        document,
+        limit,
+        queryLower,
+        queryWords,
+        searchOptions
+      );
       
-      // Ищем по тексту во всех чанках
-      for (const chunk of allChunks) {
-        const contentLower = chunk.content.toLowerCase();
-        let score = 0;
-        let matchType = 'none';
-        
-        // Проверяем точное совпадение фразы
-        if (contentLower.includes(queryLower)) {
-          score = 1.0;
-          matchType = 'exact_phrase';
-        }
-        // Проверяем совпадение всех слов запроса
-        else if (queryWords.length > 1 && queryWords.every(word => contentLower.includes(word))) {
-          score = 0.8;
-          matchType = 'all_words';
-        }
-        // Проверяем совпадение большинства слов
-        else {
-          const matchingWords = queryWords.filter(word => contentLower.includes(word));
-          if (matchingWords.length > 0) {
-            score = 0.6 * (matchingWords.length / queryWords.length);
-            matchType = 'partial_words';
-          }
-        }
-        
-        // Дополнительные бонусы для релевантности
-        if (score > 0) {
-          // Бонус за близость к концу документа (если prioritizeEnd включен)
-          if (searchOptions.prioritizeEnd && document.totalChunks) {
-            const chunkPosition = (chunk.chunkIndex || 0) / (document.totalChunks || 1);
-            const endBonus = chunkPosition * 0.3; // Увеличиваем бонус до 30%
-            score += endBonus;
-          }
-          
-          // Бонус за точное совпадение в начале чанка
-          const matchPosition = contentLower.indexOf(queryLower);
-          if (matchPosition >= 0 && matchPosition < 100) {
-            score += 0.15; // Увеличиваем бонус
-          }
-          
-          // Бонус за длину совпадения
-          if (matchType === 'exact_phrase') {
-            score += Math.min(queryLower.length / 100, 0.15); // Увеличиваем бонус
-          }
-          
-          // Бонус за релевантность контекста (если чанк содержит технические термины)
-          const technicalTerms = ['const', 'constexpr', 'enum', 'class', 'struct', 'template', 'function', 'variable', 'type'];
-          const hasTechnicalTerms = technicalTerms.some(term => contentLower.includes(term));
-          if (hasTechnicalTerms) {
-            score += 0.1;
-          }
-        }
-        
-        if (score > 0) {
-          results.push({
-            document: {
-              id: document.id,
-              title: document.title,
-              fileSize: document.fileSize,
-              uploadDate: document.uploadDate,
-              tags: document.tags,
-              status: document.status,
-              type: document.type,
-              description: document.description,
-              totalChunks: document.totalChunks,
-              processedChunks: document.processedChunks,
-              embeddingErrors: document.embeddingErrors,
-              processingQuality: document.processingQuality,
-              chunksWithoutEmbeddings: document.chunksWithoutEmbeddings,
-            },
-            chunk: {
-              id: chunk.id,
-              documentId: chunk.documentId,
-              content: chunk.content,
-              pageNumber: chunk.pageNumber,
-              chunkIndex: chunk.chunkIndex,
-              tokens: chunk.tokens,
-              embeddingError: chunk.embeddingError,
-              totalChunks: document.totalChunks,
-              processedChunks: document.processedChunks,
-              embeddingErrors: document.embeddingErrors,
-              processingQuality: document.processingQuality,
-              chunksWithoutEmbeddings: document.chunksWithoutEmbeddings,
-            },
-            score: Math.min(score, 1.0),
-            highlights: [],
-            context: '',
-          });
-          
-          if (results.length >= limit * 2) break; // Собираем больше результатов для лучшей сортировки
-        }
-      }
-      
-      // Сортируем результаты по score и chunkIndex
-      results.sort((a, b) => {
-        if (Math.abs(a.score - b.score) < 0.1) {
-          // Если scores близки, приоритизируем по chunkIndex
-          if (searchOptions.prioritizeEnd) {
-            return (b.chunk?.chunkIndex || 0) - (a.chunk?.chunkIndex || 0);
-          } else {
-            return (a.chunk?.chunkIndex || 0) - (b.chunk?.chunkIndex || 0);
-          }
-        }
-        return b.score - a.score;
-      });
-      
-      // Возвращаем только нужное количество результатов
-      return results.slice(0, limit);
+      return documentResults;
     } catch (error) {
       logger.error(`Ошибка при поиске по всем чанкам: ${error}`);
       return [];
     }
+  }
+
+  private async searchInDocumentChunks(
+    query: string,
+    document: any,
+    limit: number,
+    queryLower: string,
+    queryWords: string[],
+    searchOptions: any
+  ): Promise<SearchResult[]> {
+    const results: SearchResult[] = [];
+    
+    // Получаем все чанки документа
+    const allChunks = await this.getAllDocumentChunks(document.id);
+    logger.info(`Найдено ${allChunks.length} чанков в документе ${document.id}`);
+    
+    // Определяем порядок сортировки
+    if (searchOptions.reverseOrder || searchOptions.prioritizeEnd) {
+      // Сортируем чанки по chunkIndex в обратном порядке (начинаем с конца)
+      allChunks.sort((a, b) => (b.chunkIndex || 0) - (a.chunkIndex || 0));
+    } else {
+      // Сортируем чанки по chunkIndex в обычном порядке
+      allChunks.sort((a, b) => (a.chunkIndex || 0) - (b.chunkIndex || 0));
+    }
+    
+    // Ищем по тексту во всех чанках
+    for (const chunk of allChunks) {
+      const contentLower = chunk.content.toLowerCase();
+      let score = 0;
+      let matchType = 'none';
+      
+      // Проверяем точное совпадение фразы
+      if (contentLower.includes(queryLower)) {
+        score = 1.0;
+        matchType = 'exact_phrase';
+      }
+      // Проверяем совпадение всех слов запроса
+      else if (queryWords.length > 1 && queryWords.every(word => contentLower.includes(word))) {
+        score = 0.8;
+        matchType = 'all_words';
+      }
+      // Проверяем совпадение большинства слов
+      else {
+        const matchingWords = queryWords.filter(word => contentLower.includes(word));
+        if (matchingWords.length > 0) {
+          score = 0.6 * (matchingWords.length / queryWords.length);
+          matchType = 'partial_words';
+        }
+      }
+      
+      // Дополнительные бонусы для релевантности
+      if (score > 0) {
+        // Бонус за близость к концу документа (если prioritizeEnd включен)
+        if (searchOptions.prioritizeEnd && document.totalChunks) {
+          const chunkPosition = (chunk.chunkIndex || 0) / (document.totalChunks || 1);
+          const endBonus = chunkPosition * 0.3; // Увеличиваем бонус до 30%
+          score += endBonus;
+        }
+        
+        // Бонус за точное совпадение в начале чанка
+        const matchPosition = contentLower.indexOf(queryLower);
+        if (matchPosition >= 0 && matchPosition < 100) {
+          score += 0.15; // Увеличиваем бонус
+        }
+        
+        // Бонус за длину совпадения
+        if (matchType === 'exact_phrase') {
+          score += Math.min(queryLower.length / 100, 0.15); // Увеличиваем бонус
+        }
+        
+        // Бонус за релевантность контекста (если чанк содержит технические термины)
+        const technicalTerms = ['const', 'constexpr', 'enum', 'class', 'struct', 'template', 'function', 'variable', 'type'];
+        const hasTechnicalTerms = technicalTerms.some(term => contentLower.includes(term));
+        if (hasTechnicalTerms) {
+          score += 0.1;
+        }
+      }
+      
+      if (score > 0) {
+        results.push({
+          document: {
+            id: document.id,
+            title: document.title,
+            fileSize: document.fileSize,
+            uploadDate: document.uploadDate,
+            tags: document.tags,
+            status: document.status,
+            type: document.type,
+            description: document.description,
+            totalChunks: document.totalChunks,
+            processedChunks: document.processedChunks,
+            embeddingErrors: document.embeddingErrors,
+            processingQuality: document.processingQuality,
+            chunksWithoutEmbeddings: document.chunksWithoutEmbeddings,
+          },
+          chunk: {
+            id: chunk.id,
+            documentId: chunk.documentId,
+            content: chunk.content,
+            pageNumber: chunk.pageNumber,
+            chunkIndex: chunk.chunkIndex,
+            tokens: chunk.tokens,
+            embeddingError: chunk.embeddingError,
+            totalChunks: document.totalChunks,
+            processedChunks: document.processedChunks,
+            embeddingErrors: document.embeddingErrors,
+            processingQuality: document.processingQuality,
+            chunksWithoutEmbeddings: document.chunksWithoutEmbeddings,
+          },
+          score: Math.min(score, 1.0),
+          highlights: [],
+          context: '',
+        });
+        
+        if (results.length >= limit * 2) break; // Собираем больше результатов для лучшей сортировки
+      }
+    }
+    
+    // Сортируем результаты по score и chunkIndex
+    results.sort((a, b) => {
+      if (Math.abs(a.score - b.score) < 0.1) {
+        // Если scores близки, приоритизируем по chunkIndex
+        if (searchOptions.prioritizeEnd) {
+          return (b.chunk?.chunkIndex || 0) - (a.chunk?.chunkIndex || 0);
+        } else {
+          return (a.chunk?.chunkIndex || 0) - (b.chunk?.chunkIndex || 0);
+        }
+      }
+      return b.score - a.score;
+    });
+    
+    // Возвращаем только нужное количество результатов
+    return results.slice(0, limit);
   }
 
 

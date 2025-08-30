@@ -36,7 +36,7 @@ const SearchQuerySchema = z.object({
 
 const AIQuerySchema = z.object({
   query: z.string().min(1),
-  maxSources: z.number().int().min(1).max(20).optional().default(10),
+  maxSources: z.number().int().min(1).max(50).optional().default(20),
   includeReasoning: z.boolean().optional().default(true),
 });
 
@@ -130,7 +130,7 @@ export class KnowledgeController {
       
       const searchResults = await this.vectraService.searchDocuments(queryData.query, {
         limit: queryData.maxSources,
-        threshold: 0.6
+        threshold: 0.1
       });
       
       // Генерируем AI ответ
