@@ -1,8 +1,16 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { Settings, Globe, Bot, Save, RotateCcw, Eye, EyeOff, Zap, MessageSquare, Code, Database, Shield, X, CheckCircle, AlertCircle, Loader2, RefreshCw } from "lucide-react";
-import Link from "next/link";
+import { Globe, Bot, Save, RotateCcw, Eye, EyeOff, X, CheckCircle, AlertCircle, Loader2, RefreshCw } from "lucide-react";
+import { AppSidebar } from "@/components/app-sidebar";
+import { SiteHeader } from "@/components/site-header";
+import { SidebarInset, SidebarProvider } from "@/components/ui/sidebar";
+import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
+import { Label } from "@/components/ui/label";
+import { Switch } from "@/components/ui/switch";
+import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from "@/components/ui/select";
 
 interface AISettings {
   model: string;
@@ -535,456 +543,228 @@ export default function SettingsPage() {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 to-blue-50 dark:from-slate-900 dark:to-slate-800">
-      {/* Header */}
-      <header className="border-b border-slate-200 dark:border-slate-700 bg-white/80 dark:bg-slate-900/80 backdrop-blur-sm">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex items-center justify-between h-16">
-            <div className="flex items-center space-x-4">
-              <Link
-                href="/"
-                className="flex items-center space-x-3 text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white transition-colors"
-              >
-                <Zap className="w-5 h-5" />
-                <span className="font-medium">PMAC Assistant</span>
-              </Link>
-              <div className="w-px h-6 bg-slate-300 dark:bg-slate-600"></div>
-              <div className="flex items-center space-x-2">
-                <Settings className="w-5 h-5 text-blue-600" />
-                <span className="font-semibold text-slate-900 dark:text-white">
-                  Настройки
-                </span>
-              </div>
-            </div>
-            <div className="flex items-center space-x-4">
-                             <button
-                 onClick={resetSettings}
-                 className="flex items-center space-x-2 text-sm text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white transition-colors"
-               >
-                 <RotateCcw className="w-4 h-4" />
-                 <span>Сбросить</span>
-               </button>
-               <button
-                 onClick={() => {
-                   localStorage.removeItem('aiSettings');
-                   window.location.reload();
-                 }}
-                 className="flex items-center space-x-2 text-sm text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white transition-colors"
-               >
-                 <RefreshCw className="w-4 h-4" />
-                 <span>Перезагрузить</span>
-               </button>
-              <button
-                onClick={saveSettings}
-                disabled={isLoading}
-                className="flex items-center space-x-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 transition-colors"
-              >
-                {isLoading ? (
-                  <>
-                    <Loader2 className="w-4 h-4 animate-spin" />
-                    <span>Сохранение...</span>
-                  </>
-                ) : (
-                  <>
-                    <Save className="w-4 h-4" />
-                    <span>Сохранить</span>
-                  </>
-                )}
-              </button>
-            </div>
-          </div>
-        </div>
-      </header>
-
-      <div className="flex">
-        {/* Sidebar */}
-        <aside className="w-64 bg-white dark:bg-slate-800 border-r border-slate-200 dark:border-slate-700 min-h-screen">
-          <div className="p-6">
-            <h2 className="text-lg font-semibold text-slate-900 dark:text-white mb-6">
-              Настройки
-            </h2>
-            <nav className="space-y-2">
-              <button
-                onClick={() => setActiveTab('general')}
-                className={`w-full flex items-center space-x-3 px-4 py-3 rounded-lg transition-colors ${
-                  activeTab === 'general'
-                    ? 'bg-blue-50 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-700'
-                    : 'text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700'
-                }`}
-              >
-                <Globe className="w-5 h-5" />
-                <span>Общие</span>
-              </button>
-              <button
-                onClick={() => setActiveTab('ai')}
-                className={`w-full flex items-center space-x-3 px-4 py-3 rounded-lg transition-colors ${
-                  activeTab === 'ai'
-                    ? 'bg-blue-50 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-700'
-                    : 'text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700'
-                }`}
-              >
-                <Bot className="w-5 h-5" />
-                <span>ИИ</span>
-              </button>
-            </nav>
-          </div>
-        </aside>
-
-        {/* Main Content */}
-        <main className="flex-1 p-8">
-          {/* Save Status */}
-          {saveStatus === 'saved' && (
-            <div className="mb-6 p-4 bg-green-50 dark:bg-green-900/30 border border-green-200 dark:border-green-700 rounded-lg">
-              <div className="flex items-center space-x-2 text-green-700 dark:text-green-300">
-                <CheckCircle className="w-4 h-4" />
-                <span>Настройки успешно сохранены</span>
-              </div>
-            </div>
-          )}
-          
-          {saveStatus === 'error' && (
-            <div className="mb-6 p-4 bg-red-50 dark:bg-red-900/30 border border-red-200 dark:border-red-700 rounded-lg">
-              <div className="flex items-center space-x-2 text-red-700 dark:text-red-300">
-                <AlertCircle className="w-4 h-4" />
-                <span>Ошибка сохранения настроек</span>
-              </div>
-            </div>
-          )}
-
-          {/* General Settings */}
-          {activeTab === 'general' && (
-            <div className="space-y-6">
-              <div className="bg-white dark:bg-slate-800 rounded-xl shadow-sm border border-slate-200 dark:border-slate-700 p-6">
-                <h3 className="text-lg font-semibold text-slate-900 dark:text-white mb-6">
-                  Общие настройки
-                </h3>
-                
-                <div className="space-y-6">
-                  {/* Language */}
-                  <div>
-                    <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
-                      Язык интерфейса
-                    </label>
-                    <select
-                      value={generalSettings.language}
-                      onChange={(e) => setGeneralSettings({...generalSettings, language: e.target.value})}
-                      className="w-full px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700 text-slate-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                    >
-                      <option value="ru">Русский</option>
-                      <option value="en">English</option>
-                    </select>
-                  </div>
-
-                  {/* Theme */}
-                  <div>
-                    <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
-                      Тема
-                    </label>
-                    <select
-                      value={generalSettings.theme}
-                      onChange={(e) => setGeneralSettings({...generalSettings, theme: e.target.value})}
-                      className="w-full px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700 text-slate-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                    >
-                      <option value="light">Светлая</option>
-                      <option value="dark">Темная</option>
-                      <option value="auto">Авто</option>
-                    </select>
-                  </div>
-
-                  {/* Notifications */}
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <label className="text-sm font-medium text-slate-700 dark:text-slate-300">
-                        Уведомления
-                      </label>
-                      <p className="text-sm text-slate-500 dark:text-slate-400">
-                        Показывать уведомления о событиях
-                      </p>
-                    </div>
-                    <button
-                      onClick={() => setGeneralSettings({...generalSettings, notifications: !generalSettings.notifications})}
-                      className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
-                        generalSettings.notifications ? 'bg-blue-600' : 'bg-slate-200 dark:bg-slate-700'
-                      }`}
-                    >
-                      <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
-                        generalSettings.notifications ? 'translate-x-6' : 'translate-x-1'
-                      }`} />
-                    </button>
-                  </div>
-
-                  {/* Auto Save */}
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <label className="text-sm font-medium text-slate-700 dark:text-slate-300">
-                        Автосохранение
-                      </label>
-                      <p className="text-sm text-slate-500 dark:text-slate-400">
-                        Автоматически сохранять изменения
-                      </p>
-                    </div>
-                    <button
-                      onClick={() => setGeneralSettings({...generalSettings, autoSave: !generalSettings.autoSave})}
-                      className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
-                        generalSettings.autoSave ? 'bg-blue-600' : 'bg-slate-200 dark:bg-slate-700'
-                      }`}
-                    >
-                      <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
-                        generalSettings.autoSave ? 'translate-x-6' : 'translate-x-1'
-                      }`} />
-                    </button>
-                  </div>
-
-                  {/* Connection Timeout */}
-                  <div>
-                    <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
-                      Таймаут соединения (секунды)
-                    </label>
-                    <input
-                      type="number"
-                      min="5"
-                      max="120"
-                      value={generalSettings.connectionTimeout}
-                      onChange={(e) => setGeneralSettings({...generalSettings, connectionTimeout: parseInt(e.target.value)})}
-                      className="w-full px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700 text-slate-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                    />
-                  </div>
-                </div>
-              </div>
-            </div>
-          )}
-
-          {/* AI Settings */}
-          {activeTab === 'ai' && (
-            <div className="space-y-6">
-              <div className="bg-white dark:bg-slate-800 rounded-xl shadow-sm border border-slate-200 dark:border-slate-700 p-6">
-                <h3 className="text-lg font-semibold text-slate-900 dark:text-white mb-6">
-                  Настройки ИИ
-                </h3>
-                
-                <div className="space-y-6">
-                  {/* Provider (Read-only) */}
-                  <div>
-                    <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
-                      Провайдер AI
-                    </label>
-                    <input
-                      type="text"
-                      value={aiSettings.provider}
-                      readOnly
-                      className="w-full px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-lg bg-slate-50 dark:bg-slate-700/50 text-slate-900 dark:text-white cursor-not-allowed"
-                    />
-                    <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
-                      Провайдер определяется автоматически при выборе модели
-                    </p>
-                  </div>
-
-                  {/* Model Input */}
-                  <div>
-                    <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
-                      Модель AI (введите вручную)
-                    </label>
-                    <input
-                      type="text"
-                      value={aiSettings.model}
-                      onChange={(e) => handleModelInputChange(e.target.value)}
-                      placeholder="z-ai/glm-4.5-air:free"
-                      className="w-full px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700 text-slate-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                    />
-                  </div>
-
-                  {/* Model Select */}
-                  <div>
-                    <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
-                      Или выберите из списка доступных моделей OpenRouter
-                    </label>
-                    <div className="flex items-center space-x-2">
-                      <select
-                        onChange={(e) => handleModelSelect(e.target.value)}
-                        className="flex-1 px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700 text-slate-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                      >
-                        <option value="">Выберите модель...</option>
-                        {availableModels.map((model) => (
-                          <option key={model.id} value={model.id}>
-                            {model.name} - {model.context_length.toLocaleString()} токенов
-                          </option>
-                        ))}
-                      </select>
-                      <button
-                        onClick={loadModels}
-                        disabled={isLoadingModels}
-                        className="px-3 py-2 bg-slate-100 dark:bg-slate-700 text-slate-700 dark:text-slate-300 rounded-lg hover:bg-slate-200 dark:hover:bg-slate-600 transition-colors disabled:opacity-50"
-                        title="Обновить список моделей"
-                      >
-                        {isLoadingModels ? <Loader2 className="w-4 h-4 animate-spin" /> : <RefreshCw className="w-4 h-4" />}
-                      </button>
-                    </div>
-                    <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
-                      Выберите модель для автоматического заполнения поля выше. Данные загружаются с OpenRouter API
-                    </p>
-                  </div>
-
-                                     {/* API Key */}
-                   <div>
-                     <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
-                       API ключ OpenRouter
-                     </label>
-                     {/* Отладочная информация */}
-                     <div className="mb-2 p-2 bg-slate-100 dark:bg-slate-700 rounded text-xs">
-                       <div>Текущий ключ: {aiSettings.apiKey ? `${aiSettings.apiKey.substring(0, 10)}...` : 'Не установлен'}</div>
-                       <div>Оригинальный ключ: {originalApiKey ? `${originalApiKey.substring(0, 10)}...` : 'Не установлен'}</div>
-                       <div>Изменен: {apiKeyChanged ? 'Да' : 'Нет'}</div>
-                     </div>
-                    <div className="relative">
-                                             <input
-                         type={showApiKey ? "text" : "password"}
-                         value={aiSettings.apiKey}
-                         onChange={(e) => handleApiKeyChange(e.target.value)}
-                         placeholder="sk-or-v1-..."
-                         className={`w-full px-3 py-2 pr-10 border rounded-lg bg-white dark:bg-slate-700 text-slate-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-transparent ${
-                           apiKeyChanged 
-                             ? 'border-orange-300 dark:border-orange-600 bg-orange-50 dark:bg-orange-900/20' 
-                             : 'border-slate-300 dark:border-slate-600'
-                         }`}
-                       />
-                      <button
-                        type="button"
-                        onClick={() => setShowApiKey(!showApiKey)}
-                        className="absolute right-3 top-1/2 transform -translate-y-1/2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-300"
-                      >
-                        {showApiKey ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                      </button>
-                    </div>
-                                         <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
-                       API ключ автоматически загружается из конфигурации. При нажатии "Сохранить" новый ключ будет сохранен в конфигурацию.
-                     </p>
-                     {apiKeyChanged && (
-                       <p className="mt-1 text-sm text-orange-600 dark:text-orange-400 flex items-center">
-                         <span className="w-2 h-2 bg-orange-500 rounded-full mr-2"></span>
-                         API ключ изменен - нажмите "Сохранить" для применения
-                       </p>
-                     )}
-                    <button
-                      onClick={testAIConnection}
-                      disabled={!aiSettings.apiKey || isTesting}
-                      className="mt-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:opacity-50 transition-colors"
-                    >
-                      {isTesting ? 'Тестирование...' : 'Тест соединения'}
-                    </button>
-                  </div>
-
-                  {/* Temperature */}
-                  <div>
-                    <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
-                      Температура (креативность): {aiSettings.temperature}
-                    </label>
-                    <input
-                      type="range"
-                      min="0"
-                      max="2"
-                      step="0.1"
-                      value={aiSettings.temperature}
-                      onChange={(e) => setAISettings({...aiSettings, temperature: parseFloat(e.target.value)})}
-                      className="w-full h-2 bg-slate-200 dark:bg-slate-700 rounded-lg appearance-none cursor-pointer slider"
-                    />
-                    <div className="flex justify-between text-xs text-slate-500 dark:text-slate-400 mt-1">
-                      <span>Точный (0)</span>
-                      <span>Сбалансированный (1)</span>
-                      <span>Креативный (2)</span>
-                    </div>
-                  </div>
-
-
-
-                  {/* System Prompt */}
-                  <div>
-                    <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
-                      Системная директива
-                    </label>
-                    <textarea
-                      value={aiSettings.systemPrompt}
-                      onChange={(e) => setAISettings({...aiSettings, systemPrompt: e.target.value})}
-                      rows={4}
-                      placeholder="Введите системную директиву для модели..."
-                      className="w-full px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700 text-slate-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-none"
-                    />
-                    <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
-                      Эта директива будет отправляться модели перед каждым запросом
-                    </p>
-                  </div>
-                </div>
-              </div>
-            </div>
-          )}
-        </main>
-      </div>
-
-      {/* Test Connection Modal */}
-      {showTestModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white dark:bg-slate-800 rounded-xl shadow-xl max-w-md w-full mx-4">
-            <div className="p-6">
-              <div className="flex items-center justify-between mb-4">
-                <h3 className="text-lg font-semibold text-slate-900 dark:text-white">
-                  Тест соединения с AI
-                </h3>
-                <button
-                  onClick={() => setShowTestModal(false)}
-                  className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-300"
-                >
-                  <X className="w-5 h-5" />
-                </button>
-              </div>
-              
-              {isTesting && (
-                <div className="flex items-center space-x-3 py-4">
-                  <Loader2 className="w-5 h-5 animate-spin text-blue-600" />
-                  <span className="text-slate-700 dark:text-slate-300">Тестирование соединения...</span>
-                </div>
-              )}
-              
-              {testResult && !isTesting && (
-                <div className="space-y-4">
-                  <div className={`flex items-center space-x-3 p-4 rounded-lg ${
-                    testResult.success 
-                      ? 'bg-green-50 dark:bg-green-900/30 border border-green-200 dark:border-green-700' 
-                      : 'bg-red-50 dark:bg-red-900/30 border border-red-200 dark:border-red-700'
-                  }`}>
-                    {testResult.success ? (
-                      <CheckCircle className="w-5 h-5 text-green-600" />
+    <SidebarProvider
+      style={{
+        "--sidebar-width": "calc(var(--spacing) * 72)",
+        "--header-height": "calc(var(--spacing) * 12)",
+      } as React.CSSProperties}
+    >
+      <AppSidebar variant="inset" />
+      <SidebarInset>
+        <SiteHeader pageTitle="Settings" />
+        <div className="flex flex-1 flex-col">
+          <div className="@container/main flex flex-1 flex-col gap-2">
+            <div className="flex flex-col gap-4 pt-4 pb-4 md:gap-6 md:pt-6 md:pb-6">
+              <div className="px-4 lg:px-6">
+                <div className="flex items-center justify-end gap-2">
+                  <button
+                    onClick={resetSettings}
+                    className="flex items-center space-x-2 text-sm text-slate-600 dark:text-slate-300 hover:bg-muted hover:text-muted-foreground transition-colors px-3 py-2 rounded-md border"
+                  >
+                    <RotateCcw className="w-4 h-4" />
+                    <span>Сбросить</span>
+                  </button>
+                  <button
+                    onClick={() => {
+                      localStorage.removeItem('aiSettings');
+                      window.location.reload();
+                    }}
+                    className="flex items-center space-x-2 text-sm text-slate-600 dark:text-slate-300 hover:bg-muted hover:text-muted-foreground transition-colors px-3 py-2 rounded-md border"
+                  >
+                    <RefreshCw className="w-4 h-4" />
+                    <span>Перезагрузить</span>
+                  </button>
+                  <button
+                    onClick={saveSettings}
+                    disabled={isLoading}
+                    className="flex items-center space-x-2 px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:opacity-50 transition-colors"
+                  >
+                    {isLoading ? (
+                      <>
+                        <Loader2 className="w-4 h-4 animate-spin" />
+                        <span>Сохранение...</span>
+                      </>
                     ) : (
-                      <AlertCircle className="w-5 h-5 text-red-600" />
+                      <>
+                        <Save className="w-4 h-4" />
+                        <span>Сохранить</span>
+                      </>
                     )}
-                    <div>
-                      <p className={`font-medium ${
-                        testResult.success ? 'text-green-800 dark:text-green-200' : 'text-red-800 dark:text-red-200'
-                      }`}>
-                        {testResult.message}
-                      </p>
-                      {testResult.details && (
-                        <p className={`text-sm mt-1 ${
-                          testResult.success ? 'text-green-700 dark:text-green-300' : 'text-red-700 dark:text-red-300'
-                        }`}>
-                          {testResult.details}
-                        </p>
-                      )}
+                  </button>
+                </div>
+              </div>
+              <div className="px-4 lg:px-6">
+                {/* Save Status */}
+                {saveStatus === 'saved' && (
+                  <div className="mb-6 p-4 bg-green-50 dark:bg-green-900/30 border border-green-200 dark:border-green-700 rounded-lg">
+                    <div className="flex items-center space-x-2 text-green-700 dark:text-green-300">
+                      <CheckCircle className="w-4 h-4" />
+                      <span>Настройки успешно сохранены</span>
                     </div>
                   </div>
+                )}
+                {saveStatus === 'error' && (
+                  <div className="mb-6 p-4 bg-red-50 dark:bg-red-900/30 border border-red-200 dark:border-red-700 rounded-lg">
+                    <div className="flex items-center space-x-2 text-red-700 dark:text-red-300">
+                      <AlertCircle className="w-4 h-4" />
+                      <span>Ошибка сохранения настроек</span>
+                    </div>
+                  </div>
+                )}
+                {/* Tabs-like controls on left replaced by simple buttons */}
+                <div className="flex gap-2 mb-4">
+                  <button
+                    onClick={() => setActiveTab('general')}
+                    className={`px-3 py-2 rounded-md border text-sm ${activeTab === 'general' ? 'bg-muted' : ''}`}
+                  >
+                    <Globe className="w-4 h-4 inline mr-2" />Общие
+                  </button>
+                  <button
+                    onClick={() => setActiveTab('ai')}
+                    className={`px-3 py-2 rounded-md border text-sm ${activeTab === 'ai' ? 'bg-muted' : ''}`}
+                  >
+                    <Bot className="w-4 h-4 inline mr-2" />ИИ
+                  </button>
                 </div>
-              )}
-              
-              <div className="flex justify-end mt-6">
-                <button
-                  onClick={() => setShowTestModal(false)}
-                  className="px-4 py-2 bg-slate-100 dark:bg-slate-700 text-slate-700 dark:text-slate-300 rounded-lg hover:bg-slate-200 dark:hover:bg-slate-600 transition-colors"
-                >
-                  Закрыть
-                </button>
+                {/* Main Content */}
+                {activeTab === 'general' && (
+                  <div className="space-y-6">
+                    <Card>
+                      <CardHeader>
+                        <CardTitle>Общие настройки</CardTitle>
+                      </CardHeader>
+                      <CardContent className="space-y-6">
+                        {/* Language */}
+                        <div>
+                          <Label className="mb-2 block">Язык интерфейса</Label>
+                          <Select value={generalSettings.language} onValueChange={(val) => setGeneralSettings({...generalSettings, language: val})}>
+                            <SelectTrigger>
+                              <SelectValue placeholder="Выберите язык" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="ru">Русский</SelectItem>
+                              <SelectItem value="en">English</SelectItem>
+                            </SelectContent>
+                          </Select>
+                        </div>
+                        {/* Theme */}
+                        <div>
+                          <Label className="mb-2 block">Тема</Label>
+                          <Select value={generalSettings.theme} onValueChange={(val) => setGeneralSettings({...generalSettings, theme: val})}>
+                            <SelectTrigger>
+                              <SelectValue placeholder="Выберите тему" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="light">Светлая</SelectItem>
+                              <SelectItem value="dark">Тёмная</SelectItem>
+                              <SelectItem value="auto">Авто</SelectItem>
+                            </SelectContent>
+                          </Select>
+                        </div>
+                        {/* Notifications */}
+                        <div className="flex items-center justify-between">
+                          <div>
+                            <Label>Уведомления</Label>
+                            <p className="text-sm text-muted-foreground">Показывать уведомления о событиях</p>
+                          </div>
+                          <Switch checked={generalSettings.notifications} onCheckedChange={(val) => setGeneralSettings({...generalSettings, notifications: val})} />
+                        </div>
+                        {/* Auto Save */}
+                        <div className="flex items-center justify-between">
+                          <div>
+                            <Label>Автосохранение</Label>
+                            <p className="text-sm text-muted-foreground">Автоматически сохранять изменения</p>
+                          </div>
+                          <Switch checked={generalSettings.autoSave} onCheckedChange={(val) => setGeneralSettings({...generalSettings, autoSave: val})} />
+                        </div>
+                        {/* Connection Timeout */}
+                        <div>
+                          <Label className="mb-2 block">Таймаут соединения (секунды)</Label>
+                          <Input type="number" min={5} max={120} value={generalSettings.connectionTimeout} onChange={(e) => setGeneralSettings({...generalSettings, connectionTimeout: parseInt(e.target.value)})} />
+                        </div>
+                      </CardContent>
+                    </Card>
+                  </div>
+                )}
+                {activeTab === 'ai' && (
+                  <div className="space-y-6">
+                    <Card>
+                      <CardHeader>
+                        <CardTitle>Настройки ИИ</CardTitle>
+                      </CardHeader>
+                      <CardContent className="space-y-6">
+                        {/* Provider */}
+                        <div>
+                          <Label className="mb-2 block">Провайдер AI</Label>
+                          <Input value={aiSettings.provider} readOnly className="cursor-not-allowed bg-muted" />
+                          <p className="mt-1 text-sm text-muted-foreground">Провайдер определяется автоматически при выборе модели</p>
+                        </div>
+                        {/* Model Input */}
+                        <div>
+                          <Label className="mb-2 block">Модель AI (введите вручную)</Label>
+                          <Input value={aiSettings.model} onChange={(e) => handleModelInputChange(e.target.value)} placeholder="z-ai/glm-4.5-air:free" />
+                        </div>
+                        {/* Model Select */}
+                        <div>
+                          <Label className="mb-2 block">Или выберите из списка доступных моделей OpenRouter</Label>
+                          <div className="flex items-center space-x-2">
+                            <Select onValueChange={(val) => handleModelSelect(val)}>
+                              <SelectTrigger className="flex-1">
+                                <SelectValue placeholder="Выберите модель..." />
+                              </SelectTrigger>
+                              <SelectContent>
+                                {availableModels.map((model) => (
+                                  <SelectItem key={model.id} value={model.id}>{model.name} - {model.context_length.toLocaleString()} токенов</SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                            <button onClick={loadModels} disabled={isLoadingModels} className="px-3 py-2 bg-slate-100 dark:bg-slate-700 text-slate-700 dark:text-slate-300 rounded-lg hover:bg-slate-200 dark:hover:bg-slate-600 transition-colors disabled:opacity-50" title="Обновить список моделей">
+                              {isLoadingModels ? <Loader2 className="w-4 h-4 animate-spin" /> : <RefreshCw className="w-4 h-4" />}
+                            </button>
+                          </div>
+                          <p className="mt-1 text-sm text-muted-foreground">Выберите модель для автоматического заполнения поля выше. Данные загружаются с OpenRouter API</p>
+                        </div>
+                        {/* API Key */}
+                        <div>
+                          <Label className="mb-2 block">API ключ OpenRouter</Label>
+                          <div className="mb-2 p-2 bg-slate-100 dark:bg-slate-800 rounded text-xs">
+                            <div>Текущий ключ: {aiSettings.apiKey ? `${aiSettings.apiKey.substring(0, 10)}...` : 'Не установлен'}</div>
+                            <div>Оригинальный ключ: {originalApiKey ? `${originalApiKey.substring(0, 10)}...` : 'Не установлен'}</div>
+                            <div>Изменен: {apiKeyChanged ? 'Да' : 'Нет'}</div>
+                          </div>
+                          <div className="relative">
+                            <Input type={showApiKey ? "text" : "password"} value={aiSettings.apiKey} onChange={(e) => handleApiKeyChange(e.target.value)} placeholder="sk-or-v1-..." className={`pr-10 ${apiKeyChanged ? 'border-orange-300 dark:border-orange-600 bg-orange-50 dark:bg-orange-900/20' : ''}`} />
+                            <button type="button" onClick={() => setShowApiKey(!showApiKey)} className="absolute right-3 top-1/2 transform -translate-y-1/2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-300">
+                              {showApiKey ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                            </button>
+                          </div>
+                          <p className="mt-1 text-sm text-muted-foreground">API ключ автоматически загружается из конфигурации. При нажатии "Сохранить" новый ключ будет сохранен в конфигурацию.</p>
+                          {apiKeyChanged && (
+                            <p className="mt-1 text-sm text-orange-600 dark:text-orange-400 flex items-center"><span className="w-2 h-2 bg-orange-500 rounded-full mr-2"></span>API ключ изменен - нажмите "Сохранить" для применения</p>
+                          )}
+                          <button onClick={testAIConnection} disabled={!aiSettings.apiKey || isTesting} className="mt-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:opacity-50 transition-colors">{isTesting ? 'Тестирование...' : 'Тест соединения'}</button>
+                        </div>
+                        {/* Temperature */}
+                        <div>
+                          <Label className="mb-2 block">Температура (креативность): {aiSettings.temperature}</Label>
+                          <input type="range" min="0" max="2" step="0.1" value={aiSettings.temperature} onChange={(e) => setAISettings({...aiSettings, temperature: parseFloat(e.target.value)})} className="w-full h-2 bg-slate-200 dark:bg-slate-700 rounded-lg appearance-none cursor-pointer slider" />
+                          <div className="flex justify-between text-xs text-muted-foreground mt-1"><span>Точный (0)</span><span>Сбалансированный (1)</span><span>Креативный (2)</span></div>
+                        </div>
+                        {/* System Prompt */}
+                        <div>
+                          <Label className="mb-2 block">Системная директива</Label>
+                          <Textarea value={aiSettings.systemPrompt} onChange={(e) => setAISettings({...aiSettings, systemPrompt: e.target.value})} rows={4} placeholder="Введите системную директиву для модели..." />
+                          <p className="mt-1 text-sm text-muted-foreground">Эта директива будет отправляться модели перед каждым запросом</p>
+                        </div>
+                      </CardContent>
+                    </Card>
+                  </div>
+                )}
               </div>
             </div>
           </div>
         </div>
-      )}
-    </div>
+      </SidebarInset>
+    </SidebarProvider>
   );
 }

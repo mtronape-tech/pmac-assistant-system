@@ -105,18 +105,13 @@ export default function KnowledgePage() {
     >
       <AppSidebar variant="inset" />
       <SidebarInset>
-        <SiteHeader />
+        <SiteHeader pageTitle="Knowledge Base" />
         <div className="flex flex-1 flex-col">
           <div className="@container/main flex flex-1 flex-col gap-2">
-            <div className="flex flex-col gap-4 py-4 md:gap-6 md:py-6">
+            <div className="flex flex-col gap-4 pb-4 md:gap-6 md:pb-6">
               {/* Welcome Section */}
               <div className="px-4 lg:px-6">
-                <div className="mb-6">
-                  <h1 className="text-3xl font-bold tracking-tight">База знаний</h1>
-                  <p className="text-muted-foreground">
-                    Управление документами и AI-обработка для вашей системы PMAC. Загружайте, анализируйте и ищите документы.
-                  </p>
-                </div>
+                {/* Заголовок уже отображается в SiteHeader */}
               </div>
               
               {/* Stats Cards */}

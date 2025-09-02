@@ -154,7 +154,7 @@ export default function MCPServerPage() {
             >
               <BookOpen className="w-5 h-5 text-green-600 dark:text-green-400" />
               <span className="text-green-700 dark:text-green-300 font-medium">
-                База знаний
+                Knowledge Base
               </span>
             </Link>
           </div>

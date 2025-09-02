@@ -63,7 +63,7 @@ export function ChatEmpty({ onQuickStart }: ChatEmptyProps) {
           <CardHeader className="pb-3">
             <div className="flex items-center space-x-2">
               <FileText className="w-5 h-5 text-blue-600" />
-              <CardTitle className="text-base">База знаний</CardTitle>
+              <CardTitle className="text-base">Knowledge Base</CardTitle>
             </div>
           </CardHeader>
           <CardContent>

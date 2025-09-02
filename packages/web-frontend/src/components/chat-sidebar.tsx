@@ -111,7 +111,7 @@ export function ChatSidebar({ messages, onQuickQuestion }: ChatSidebarProps) {
           
           <div className="space-y-2">
             <div className="flex items-center justify-between text-xs">
-              <span className="text-slate-500 dark:text-slate-400">База знаний</span>
+              <span className="text-slate-500 dark:text-slate-400">Knowledge Base</span>
               <Badge variant="secondary" className="text-xs">Подключена</Badge>
             </div>
             <div className="flex items-center justify-between text-xs">
